@@ -12,6 +12,7 @@
   <a href="day-replay.html">Browse by Date</a>
   <span class="later" title="Coming soon">Browse by Location</span>
   <a href="trips.html">Trips</a>
+  <a href="favorites.html">Favourites</a>
 </nav>
 
 <h1>My Geocache Finds</h1>
@@ -38,10 +39,12 @@
     <p>Name a date range and see its caching days together.</p>
     <div class="figures" id="trip-figures">–</div>
   </a>
+  <a class="section-card" href="favorites.html">
+    <h3>Favourite Days</h3>
+    <p>The days you've starred, newest first.</p>
+    <div class="figures" id="fav-figures">–</div>
+  </a>
 </div>
-
-<h2>Favourite days</h2>
-<div id="favorites"><div class="empty">Loading…</div></div>
 
 <h2>Settings</h2>
 <div class="panel">
@@ -133,26 +136,18 @@
     renderTrips();
   }
 
+  // Favourite Days card: how many, and the newest one
   function renderFavorites() {
-    const box = document.getElementById("favorites");
-    if (!served) {
-      box.innerHTML = '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
-      return;
-    }
+    const el = document.getElementById("fav-figures");
+    if (!served) { el.innerHTML = "&nbsp;"; return; }
     const byDate = new Map((window.GEOCACHE_DAYS || []).map(d => [d.date, d]));
     const days = favoriteDays.filter(d => byDate.has(d)).sort().reverse();
     if (!days.length) {
-      box.innerHTML = '<div class="empty">No favourite days yet. Click the ☆ beside a day\'s date in Browse by Date.</div>';
+      el.innerHTML = '<span class="muted">None yet. Click the ☆ beside a day in Browse by Date.</span>';
       return;
     }
-    box.innerHTML = '<ul class="fav-list">' + days.map(date => {
-      const d = byDate.get(date), n = d.stops.length;
-      return '<li><a href="day-replay.html?date=' + date + '">' +
-        '<span class="star">★</span>' +
-        '<span class="fdate">' + prettyDate(date) + "</span>" +
-        '<span class="fplace">' + esc(d.title || "") + "</span>" +
-        '<span class="fcount">' + n + (n === 1 ? " cache" : " caches") + "</span></a></li>";
-    }).join("") + "</ul>";
+    el.innerHTML = '<strong style="color:var(--gold)">★ ' + num(days.length) + "</strong> favourite day" +
+      (days.length === 1 ? "" : "s") + '<br><span class="muted">Newest: ' + prettyDate(days[0]) + "</span>";
   }
 
   // ---------- favourites and settings from serve.py ----------

@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Favourite Days</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<nav class="site-nav">
+  <a href="index.html">Dashboard</a>
+  <a href="day-replay.html">Browse by Date</a>
+  <span class="later" title="Coming soon">Browse by Location</span>
+  <a href="trips.html">Trips</a>
+  <a href="favorites.html" class="here">Favourites</a>
+</nav>
+
+<h1>Favourite Days</h1>
+<p class="subtitle" id="summary">Newest first. Click a day to replay it.</p>
+<div id="file-notice" class="notice" hidden>
+  You opened this page as a file, so favourites can't be loaded.
+  In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
+  then open <a href="http://localhost:8002/favorites.html">http://localhost:8002/favorites.html</a>.
+</div>
+
+<div id="favorites"><div class="empty">Loading…</div></div>
+
+<script src="data/days.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  "use strict";
+  const F = window.Finds;
+  const served = location.protocol.startsWith("http");
+  const box = document.getElementById("favorites");
+  if (!served) {
+    document.getElementById("file-notice").hidden = false;
+    box.innerHTML = '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
+    return;
+  }
+
+  function render(favoriteDays) {
+    const byDate = new Map((window.GEOCACHE_DAYS || []).map(d => [d.date, d]));
+    const days = favoriteDays.filter(d => byDate.has(d)).sort().reverse();
+    document.getElementById("summary").textContent = days.length
+      ? F.plural(days.length, "favourite day") + ", newest first. Click a day to replay it."
+      : "Newest first. Click a day to replay it.";
+    if (!days.length) {
+      box.innerHTML = '<div class="empty">No favourite days yet. Click the ☆ beside a day\'s date in Browse by Date.</div>';
+      return;
+    }
+    // One heading per year so a long list is easy to scan
+    let html = "", year = "";
+    for (const date of days) {
+      if (date.slice(0, 4) !== year) {
+        if (year) html += "</ul>";
+        year = date.slice(0, 4);
+        const n = days.filter(d => d.startsWith(year)).length;
+        html += "<h2>" + year + ' <span class="muted">· ' + F.plural(n, "day") + "</span></h2><ul class=\"fav-list\">";
+      }
+      const d = byDate.get(date), n = d.stops.length;
+      html += '<li><a href="day-replay.html?date=' + date + '">' +
+        '<span class="star">★</span>' +
+        '<span class="fdate">' + F.prettyDate(date) + "</span>" +
+        '<span class="fplace">' + F.esc(d.title || "") + "</span>" +
+        '<span class="fcount">' + F.plural(n, "cache") + "</span></a></li>";
+    }
+    box.innerHTML = html + "</ul>";
+  }
+
+  fetch("api/favorites", { cache: "no-store" })
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(j => render(j.days || []))
+    .catch(() => { box.innerHTML = '<div class="empty">Couldn\'t load favourites. Is serve.py running?</div>'; });
+})();
+</script>
+</body>
+</html>
