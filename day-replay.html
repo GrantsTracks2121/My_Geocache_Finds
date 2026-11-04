@@ -137,10 +137,22 @@
   #panel .log {
     margin-top: 14px; padding-top: 14px;
     border-top: 1px solid var(--line);
-    white-space: pre-wrap;
     overflow-wrap: anywhere;
     font-size: 14px; line-height: 1.5;
   }
+  #panel .log .plain { white-space: pre-wrap; }
+  #panel .log > :first-child { margin-top: 0; }
+  #panel .log > :last-child { margin-bottom: 0; }
+  #panel .log p { margin: 0 0 0.9em; }
+  #panel .log h1, #panel .log h2, #panel .log h3,
+  #panel .log h4, #panel .log h5, #panel .log h6 { font-size: 15px; margin: 1em 0 0.4em; }
+  #panel .log h1 { font-size: 17px; }
+  #panel .log h2 { font-size: 16px; }
+  #panel .log ul, #panel .log ol { margin: 0 0 0.9em; padding-left: 1.4em; }
+  #panel .log blockquote { margin: 0 0 0.9em; padding-left: 10px; border-left: 3px solid var(--line); color: var(--muted); }
+  #panel .log img { max-width: 100%; height: auto; }
+  #panel .log hr { border: none; border-top: 1px solid var(--line); }
+  #panel .log a { color: var(--accent); }
 
   .legend {
     background: rgba(255,255,255,.92);
@@ -213,6 +225,8 @@
 </section>
 
 <script src="lib/leaflet.js"></script>
+<script src="lib/marked.min.js"></script>
+<script src="lib/purify.min.js"></script>
 <script src="data/days.js"></script>
 <script>
 (function () {
@@ -552,7 +566,10 @@
   // Log text is plain text with Geocaching.com's old formatting codes:
   // [b]bold[/b], [i]italic[/i], [u]underline[/u], [url=...]link[/url].
   function formatLog(text) {
-    let h = escapeHtml(text);
+    if (!window.marked || !window.DOMPurify) return '<div class="plain">' + escapeHtml(text) + "</div>";
+    // Only "<" is escaped here, so raw HTML in a log shows as text, while
+    // Markdown's own quotes and ">" quote marks still work.
+    let h = String(text).replace(/</g, "&lt;");
     // Repeat so codes nested inside other codes ([b]..[i]..[/i]..[/b]) convert too
     for (let before = ""; before !== h; ) {
       before = h;
@@ -562,7 +579,17 @@
       '<a href="$1" target="_blank" rel="noopener">$2</a>');
     h = h.replace(/\[url\](https?:\/\/[^\[\s]+)\[\/url\]/gi,
       '<a href="$1" target="_blank" rel="noopener">$1</a>');
-    return h;
+    // Markdown (**bold**, [links](...), # headings, lists ...), as Geocaching.com
+    // shows it. A single line break stays a line break. The result is cleaned
+    // by DOMPurify so nothing in a log can run code on the page.
+    // "**Bold text **" with a space inside the stars isn't bold in strict
+    // Markdown; tidy the spaces so it shows as intended.
+    h = h.replace(/\*\*([^*\n]+?)\*\*/g, (m, inner) => inner.trim() ? "**" + inner.trim() + "**" : m);
+    h = DOMPurify.sanitize(marked.parse(h, { gfm: true, breaks: true }), { ADD_ATTR: ["target"] });
+    const box = document.createElement("div");
+    box.innerHTML = h;
+    box.querySelectorAll("a[href]").forEach(a => { a.target = "_blank"; a.rel = "noopener"; });
+    return box.innerHTML;
   }
 
   function closePanel() { panelEl.hidden = true; }
