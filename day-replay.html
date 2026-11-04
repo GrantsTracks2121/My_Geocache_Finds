@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Geocache Day Replay</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="lib/leaflet.css">
+<style>
+  :root {
+    --bg: #f6f5f1;
+    --panel: #ffffff;
+    --ink: #22262a;
+    --muted: #6b7178;
+    --line: #e2e0da;
+    --accent: #2f6f4f;
+    --found: #2e8b57;
+    --dnf: #c0392b;
+    --event: #2c6fbb;
+    --route: #e07b24;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    display: flex;
+  }
+
+  /* Sidebar */
+  #sidebar {
+    width: 300px;
+    flex: none;
+    display: flex;
+    flex-direction: column;
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+  }
+  #sidebar header {
+    padding: 16px 16px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  #sidebar h1 { font-size: 17px; margin: 0 0 10px; }
+  #sidebar .filters { display: flex; gap: 8px; }
+  #sidebar select {
+    font: inherit;
+    padding: 4px 6px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+  }
+  #summary { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  #days { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+  #days li {
+    padding: 9px 16px;
+    border-bottom: 1px solid var(--line);
+    cursor: pointer;
+  }
+  #days li:hover { background: #f3f6f4; }
+  #days li.active { background: #e3efe8; border-left: 4px solid var(--accent); padding-left: 12px; }
+  #days .date { font-weight: 600; }
+  #days .meta { color: var(--muted); font-size: 12px; }
+
+  /* Main */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+  }
+  #dayTitle { font-size: 16px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #progress { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #bar button {
+    font: inherit;
+    padding: 5px 12px;
+    border: 1px solid var(--accent);
+    background: var(--accent);
+    color: #fff;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  #bar label { color: var(--muted); }
+  #map { flex: 1; }
+
+  .legend {
+    background: rgba(255,255,255,.92);
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    line-height: 1.7;
+    box-shadow: 0 1px 4px rgba(0,0,0,.2);
+  }
+  .legend i {
+    display: inline-block; width: 12px; height: 12px; border-radius: 3px;
+    margin-right: 6px; vertical-align: -2px; border: 1px solid rgba(0,0,0,.35);
+  }
+
+  /* Stop marker: cache-type icon in a box coloured by log type */
+  .stop-box {
+    width: 36px; height: 36px;
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    border: 1.5px solid rgba(0,0,0,.45);
+    box-shadow: 0 1px 4px rgba(0,0,0,.35);
+  }
+  .stop-box img { width: 28px; height: 28px; display: block; }
+  .stop-box .no-icon {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: #666; color: #fff; font: 600 11px/28px sans-serif; text-align: center;
+  }
+  .leaflet-popup-content { font-size: 13px; }
+  .leaflet-popup-content b { font-size: 14px; }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <header>
+    <h1>Geocache Day Replay</h1>
+    <div class="filters">
+      <select id="yearFilter" aria-label="Year"></select>
+    </div>
+    <div id="summary"></div>
+  </header>
+  <ul id="days"></ul>
+</aside>
+
+<section id="main">
+  <div id="bar">
+    <div id="dayTitle">Choose a day</div>
+    <span id="progress"></span>
+    <label>Speed
+      <select id="speed">
+        <option value="2">Slow</option>
+        <option value="1" selected>Normal</option>
+        <option value="0.4">Fast</option>
+      </select>
+    </label>
+    <button id="replay" type="button">Replay</button>
+  </div>
+  <div id="map"></div>
+</section>
+
+<script src="lib/leaflet.js"></script>
+<script src="data/days.js"></script>
+<script>
+(function () {
+  "use strict";
+
+  const DAYS = window.GEOCACHE_DAYS || [];
+  const COLORS = { found: "#2e8b57", dnf: "#2c6fbb", note: "#ffffff", route: "#e07b24" };
+
+  // Cache type -> icon in icons/cgeo/ (c:geo icons, Apache License 2.0).
+  // Matched on words in the type name; order matters (most specific first).
+  const TYPE_ICONS = [
+    ["trash out", "cito"],
+    ["community celebration", "communceleb"],
+    ["block party", "block"],
+    ["lost and found", "gchqceleb"],
+    ["hq celebration", "gchqceleb"],
+    ["mega", "mega"],
+    ["giga", "giga"],
+    ["event", "event"],
+    ["tradition", "traditional"],
+    ["multi", "multi"],
+    ["unknown", "mystery"],
+    ["mystery", "mystery"],
+    ["letterbox", "letterbox"],
+    ["earth", "earth"],
+    ["virtual", "virtual"],
+    ["webcam", "webcam"],
+    ["wherigo", "wherigo"],
+    ["ape", "ape"],
+    ["gps adventure", "gps"],
+    ["maze", "gps"],
+    ["headquarters", "gchq"],
+    ["hq", "gchq"],
+    ["locationless", "locationless"],
+    ["lab", "advlab"]
+  ];
+  function typeIcon(type) {
+    const t = String(type).toLowerCase();
+    if (t === "brass cap") return "icons/brasscap.png";
+    const hit = TYPE_ICONS.find(r => t.includes(r[0]));
+    return "icons/cgeo/" + (hit ? hit[1] : "unknown") + ".svg";
+  }
+
+  // ---------- helpers ----------
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+  function prettyDate(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    return WEEKDAYS[dt.getUTCDay()] + " " + d + " " + MONTHS[m - 1] + " " + y;
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
+
+  // Day title from build_days.py (place-name lookup). Falls back to the
+  // day's most common province/state if the data has no title.
+  function autoTitle(day) {
+    if (day.title) return day.title;
+    const counts = {};
+    for (const s of day.stops) {
+      const place = s.state && s.state !== "None"
+        ? (s.country && s.country !== "Canada" ? s.state + ", " + s.country : s.state)
+        : s.country;
+      if (place) counts[place] = (counts[place] || 0) + 1;
+    }
+    const places = Object.keys(counts).sort((a, b) => counts[b] - counts[a]);
+    return places.slice(0, 2).join(" / ") || "Unknown location";
+  }
+
+  // Box colour: green for any find (Found it, Attended, Webcam Photo Taken),
+  // blue for Didn't find it, white for a note.
+  function stopColor(stop) {
+    if (stop.log === "Didn't find it") return COLORS.dnf;
+    if (stop.log === "Write note") return COLORS.note;
+    return COLORS.found;
+  }
+
+  // ---------- map ----------
+  const map = L.map("map", { zoomControl: true }).setView([53.54, -113.49], 10);
+  // OpenStreetMap tiles. These need the page opened through a local web server
+  // (http://localhost:8002/day-replay.html), not double-clicked from disk.
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Place names &copy; <a href="https://www.geonames.org">GeoNames</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · Boundaries: <a href="https://www.statcan.gc.ca/en/reference/licence">Statistics Canada</a> · Icons from <a href="https://github.com/cgeo/cgeo">c:geo</a> (Apache 2.0)'
+  }).addTo(map);
+  if (location.protocol === "file:") {
+    const note = L.control({ position: "topright" });
+    note.onAdd = function () {
+      const div = L.DomUtil.create("div", "legend");
+      div.innerHTML = "Map tiles need the local server.<br>In Terminal, in this folder: <b>python3 -m http.server 8002</b><br>then open <b>http://localhost:8002/day-replay.html</b>";
+      return div;
+    };
+    note.addTo(map);
+  }
+
+  const legend = L.control({ position: "bottomright" });
+  legend.onAdd = function () {
+    const div = L.DomUtil.create("div", "legend");
+    div.innerHTML =
+      '<div><i style="background:' + COLORS.found + '"></i>Found / attended</div>' +
+      '<div><i style="background:' + COLORS.dnf + '"></i>Did not find</div>' +
+      '<div><i style="background:' + COLORS.note + '"></i>Note</div>';
+    return div;
+  };
+  legend.addTo(map);
+
+  const dayLayer = L.layerGroup().addTo(map);
+
+  // ---------- sidebar ----------
+  const listEl = document.getElementById("days");
+  const yearEl = document.getElementById("yearFilter");
+  const summaryEl = document.getElementById("summary");
+
+  const years = [...new Set(DAYS.map(d => d.date.slice(0, 4)))];
+  yearEl.innerHTML = '<option value="">All years</option>' +
+    years.map(y => '<option value="' + y + '">' + y + "</option>").join("");
+
+  function renderList() {
+    const year = yearEl.value;
+    const shown = DAYS.filter(d => !year || d.date.startsWith(year));
+    const stopCount = shown.reduce((n, d) => n + d.stops.length, 0);
+    summaryEl.textContent = shown.length + " caching days, " + stopCount + " stops";
+    listEl.innerHTML = shown.map(d => {
+      const n = d.stops.length;
+      return '<li data-date="' + d.date + '">' +
+        '<div class="date">' + prettyDate(d.date) + "</div>" +
+        '<div class="meta">' + escapeHtml(autoTitle(d)) + " · " + n + (n === 1 ? " stop" : " stops") + "</div>" +
+        "</li>";
+    }).join("");
+    markActive();
+  }
+
+  listEl.addEventListener("click", e => {
+    const li = e.target.closest("li[data-date]");
+    if (li) selectDay(li.dataset.date);
+  });
+  yearEl.addEventListener("change", renderList);
+
+  // Up/down arrow keys move between days
+  document.addEventListener("keydown", e => {
+    if (e.target.tagName === "SELECT") return;
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const items = [...listEl.querySelectorAll("li[data-date]")];
+    if (!items.length) return;
+    let i = items.findIndex(li => li.dataset.date === currentDate);
+    i = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
+    e.preventDefault();
+    selectDay(items[i].dataset.date);
+  });
+
+  let currentDate = null;
+  function markActive() {
+    listEl.querySelectorAll("li").forEach(li => {
+      const on = li.dataset.date === currentDate;
+      li.classList.toggle("active", on);
+      if (on) li.scrollIntoView({ block: "nearest" });
+    });
+  }
+
+  // ---------- animation ----------
+  let runToken = 0;
+  const titleEl = document.getElementById("dayTitle");
+  const progressEl = document.getElementById("progress");
+  const speedEl = document.getElementById("speed");
+
+  function selectDay(date) {
+    currentDate = date;
+    markActive();
+    play();
+  }
+
+  document.getElementById("replay").addEventListener("click", () => { if (currentDate) play(); });
+
+  function addPin(stop, index) {
+    const src = typeIcon(stop.type);
+    const inner = src
+      ? '<img src="' + src + '" alt="">'
+      : '<div class="no-icon">?</div>';
+    const icon = L.divIcon({
+      className: "",
+      html: '<div class="stop-box" style="background:' + stopColor(stop) + '">' + inner + "</div>",
+      iconSize: [36, 36],
+      iconAnchor: [18, 18],
+      popupAnchor: [0, -18],
+      tooltipAnchor: [0, -18]
+    });
+    const marker = L.marker([stop.lat, stop.lon], { icon: icon, zIndexOffset: index }).addTo(dayLayer);
+    marker.bindTooltip((index + 1) + ". " + escapeHtml(stop.name), { direction: "top" });
+    marker.bindPopup(
+      "<b>" + escapeHtml(stop.name) + "</b><br>" +
+      escapeHtml(stop.type) + "<br>" +
+      (stop.town ? escapeHtml((stop.near ? "near " : "") + stop.town + (stop.area ? " (" + stop.area + ")" : "")) + "<br>" : "") +
+      escapeHtml(stop.log) + " · stop " + (index + 1) + "<br>" +
+      '<a href="https://coord.info/' + encodeURIComponent(stop.code) + '" target="_blank" rel="noopener">' + escapeHtml(stop.code) + "</a>" +
+      (stop.url ? ' · <a href="' + escapeHtml(stop.url) + '" target="_blank" rel="noopener">brass cap page</a>' : "")
+    );
+    return marker;
+  }
+
+  function wait(ms, token) {
+    return new Promise(resolve => setTimeout(() => resolve(token === runToken), ms));
+  }
+
+  function drawSegment(from, to, ms, token) {
+    return new Promise(resolve => {
+      const line = L.polyline([from, from], { color: COLORS.route, weight: 3, opacity: 0.9 }).addTo(dayLayer);
+      if (ms <= 0) { line.setLatLngs([from, to]); resolve(true); return; }
+      const start = performance.now();
+      function frame(now) {
+        if (token !== runToken) { resolve(false); return; }
+        const t = Math.min(1, (now - start) / ms);
+        const eased = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+        line.setLatLngs([from, [from[0] + (to[0] - from[0]) * eased, from[1] + (to[1] - from[1]) * eased]]);
+        if (t < 1) requestAnimationFrame(frame); else resolve(true);
+      }
+      requestAnimationFrame(frame);
+    });
+  }
+
+  async function play() {
+    const token = ++runToken;
+    const day = DAYS.find(d => d.date === currentDate);
+    if (!day) return;
+    const stops = day.stops;
+
+    dayLayer.clearLayers();
+    titleEl.textContent = prettyDate(day.date) + " — " + autoTitle(day);
+
+    const points = stops.map(s => [s.lat, s.lon]);
+    if (points.length === 1) {
+      map.setView(points[0], 15);
+    } else {
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+    }
+
+    // Keep long days watchable: about 30 seconds total at Normal speed
+    const factor = Number(speedEl.value);
+    const step = Math.max(250, Math.min(1300, 30000 / Math.max(1, stops.length - 1))) * factor;
+    const perSegment = step * 0.75;
+    const pause = step * 0.25;
+
+    if (!(await wait(400, token))) return;
+    addPin(stops[0], 0);
+    progressEl.textContent = "1 / " + stops.length;
+
+    for (let i = 1; i < stops.length; i++) {
+      if (!(await wait(pause, token))) return;
+      const same = points[i - 1][0] === points[i][0] && points[i - 1][1] === points[i][1];
+      if (!(await drawSegment(points[i - 1], points[i], same ? 0 : perSegment, token))) return;
+      addPin(stops[i], i);
+      progressEl.textContent = (i + 1) + " / " + stops.length;
+    }
+  }
+
+  // ---------- start ----------
+  if (!DAYS.length) {
+    titleEl.textContent = "No data found. Run build_days.py first.";
+    return;
+  }
+  renderList();
+  selectDay(DAYS[0].date);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,23 @@
+# macOS clutter
+.DS_Store
+
+# Personal Claude Code settings for this Mac
+.claude/settings.local.json
+
+# Python cache
+__pycache__/
+
+# Personal data — kept on the Mac, never committed
+# (the My Finds pocket query and the days.js file built from it)
+*.gpx
+data/
+
+# Exceptions: the public brass cap GPX files, and test samples
+!brasscaps/gpx/*.gpx
+!samples/*.gpx
+
+# GeoNames download and lookup file (large; rebuilt by build_places.py)
+geonames/
+
+# Statistics Canada boundary download and lookup file (large; rebuilt by build_boundaries.py)
+boundaries/
