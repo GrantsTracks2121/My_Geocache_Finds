@@ -6,6 +6,8 @@ Shows the pages in this folder (like `python3 -m http.server`) and also:
   - saves your favourite days and trips to favorites.json
   - saves site-wide settings to settings.json
   - saves your trips (a name and a date range) to trips.json
+  - saves My Places (your own named areas) to places.json and rebuilds
+    data/days.js so day titles use them
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
     folder and rebuilds data/days.js with build_days.py
 
@@ -104,6 +106,55 @@ def clean_trip(t):
             and trip["start"] <= trip["end"]):
         raise ValueError("bad trip")
     return trip
+
+
+PLACES_PATH = HERE / "places.json"
+
+
+def read_places():
+    try:
+        data = json.loads(PLACES_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        data = {}
+    data.setdefault("places", [])
+    return data
+
+
+def clean_place(p):
+    """One of My Places from the page, checked: id, name, lat, lon, radiusKm."""
+    if not isinstance(p, dict):
+        raise ValueError("bad place")
+    place = {
+        "id": str(p.get("id", "")),
+        "name": str(p.get("name", "")).strip()[:80],
+        "lat": round(float(p.get("lat")), 6),
+        "lon": round(float(p.get("lon")), 6),
+        "radiusKm": round(float(p.get("radiusKm")), 2),
+    }
+    if not (TRIP_ID_RE.match(place["id"]) and place["name"] and -90 <= place["lat"] <= 90
+            and -180 <= place["lon"] <= 180 and 0.1 <= place["radiusKm"] <= 100):
+        raise ValueError("bad place")
+    return place
+
+
+def rebuild_days():
+    """Run build_days.py on the newest .gpx in this folder. Returns (days, logs);
+    on failure puts the previous days.js back and raises UploadError."""
+    prev_days = DAYS_PATH.with_name("days.prev.js")
+    if DAYS_PATH.exists():
+        shutil.copy2(DAYS_PATH, prev_days)
+    try:
+        run = subprocess.run([sys.executable, str(HERE / "build_days.py")],
+                             cwd=HERE, capture_output=True, text=True, timeout=900)
+        m = re.search(r"Wrote data/days\.js: (\d+) days, (\d+) stops", run.stdout)
+        if run.returncode != 0 or not m:
+            raise UploadError("Rebuilding the place names failed. Your previous data is unchanged.")
+    except (subprocess.TimeoutExpired, UploadError) as err:
+        if prev_days.exists():
+            os.replace(prev_days, DAYS_PATH)
+        raise UploadError(str(err) if isinstance(err, UploadError) else "Rebuilding took too long.")
+    prev_days.unlink(missing_ok=True)
+    return int(m.group(1)), int(m.group(2))
 
 
 def count_logs(days_js):
@@ -211,6 +262,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, read_settings())
         elif path == "/api/trips":
             self.send_json(200, read_trips())
+        elif path == "/api/places":
+            self.send_json(200, read_places())
         else:
             super().do_GET()
 
@@ -228,8 +281,38 @@ class Handler(SimpleHTTPRequestHandler):
             self.post_finds()
         elif path == "/api/trips":
             self.post_trips()
+        elif path == "/api/places":
+            self.post_places()
         else:
             self.send_json(404, {"error": "not found"})
+
+    def post_places(self):
+        """Replace My Places with the list the page sends, then rebuild days.js
+        so day titles and Browse by Location use them."""
+        try:
+            places = [clean_place(p) for p in self.read_body().get("places", [])]
+            if len({p["id"] for p in places}) != len(places):
+                raise ValueError("duplicate place id")
+        except (ValueError, AttributeError, TypeError):
+            self.send_json(400, {"ok": False, "error": "bad places data"})
+            return
+        if not upload_lock.acquire(blocking=False):
+            self.send_json(409, {"ok": False, "error": "The data is already being rebuilt. Try again shortly."})
+            return
+        old = PLACES_PATH.read_bytes() if PLACES_PATH.exists() else None
+        try:
+            places.sort(key=lambda p: p["name"].lower())
+            write_json(PLACES_PATH, {"places": places})
+            days, logs = rebuild_days()
+            self.send_json(200, {"ok": True, "places": places, "days": days, "logs": logs})
+        except UploadError as err:
+            if old is None:
+                PLACES_PATH.unlink(missing_ok=True)
+            else:
+                PLACES_PATH.write_bytes(old)
+            self.send_json(200, {"ok": False, "error": str(err)})
+        finally:
+            upload_lock.release()
 
     def post_trips(self):
         """Replace the list of trips with the one the page sends."""

@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>My Geocache Finds</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="site.css">
 </head>
 <body>
@@ -59,6 +60,33 @@
   </div>
 </div>
 
+<div class="panel places-panel">
+  <div class="setting">
+    <span class="sname">My Places</span>
+    <span class="sdesc">Name your own places. Caches inside a place's circle are credited to it
+      instead of the nearest town, in day titles and in Browse by Location.</span>
+  </div>
+  <ul class="place-list" id="place-list"></ul>
+  <div class="place-editor">
+    <form class="place-form" id="place-form" autocomplete="off">
+      <div class="pf-title" id="pf-title">Add a place</div>
+      <label>Name
+        <input type="text" id="p-name" maxlength="80" required>
+      </label>
+      <label>Radius <span id="p-radius-val"></span>
+        <input type="range" id="p-radius" min="0.5" max="25" step="0.5" value="3">
+      </label>
+      <div class="pf-info" id="p-info">Click the map to set the centre.</div>
+      <div class="pf-actions">
+        <button class="btn" type="submit" id="p-save">Add place</button>
+        <button class="btn secondary" type="button" id="p-cancel" hidden>Cancel</button>
+      </div>
+      <div class="pf-status" id="p-status"></div>
+    </form>
+    <div id="place-map"></div>
+  </div>
+</div>
+
 <h2>Update the data</h2>
 <div class="dropzone" id="finds-drop">
   <div class="dz-title">My Finds Pocket Query</div>
@@ -66,7 +94,9 @@
     Replaces your finds: every caching day, place name and log is rebuilt from it. This takes about half a minute.</div>
 </div>
 
+<script src="lib/leaflet.js"></script>
 <script src="data/days.js"></script>
+<script src="common.js"></script>
 <script>
 (function () {
   "use strict";
@@ -263,10 +293,203 @@
   window.addEventListener("dragover", e => e.preventDefault());
   window.addEventListener("drop", e => e.preventDefault());
 
+  // Lets the My Places code refresh the page after the data is rebuilt
+  window.refreshDashboard = async () => { await reloadDays(); render(); };
+
   render();
   loadFavorites();
   loadSettings();
   loadTrips();
+})();
+</script>
+<script>
+// ---------- My Places (saved to places.json by serve.py) ----------
+(function () {
+  "use strict";
+  const F = window.Finds;
+  const served = location.protocol.startsWith("http");
+  const listEl = document.getElementById("place-list");
+  const form = document.getElementById("place-form");
+  const nameEl = document.getElementById("p-name");
+  const radiusEl = document.getElementById("p-radius");
+  const radiusVal = document.getElementById("p-radius-val");
+  const infoEl = document.getElementById("p-info");
+  const saveEl = document.getElementById("p-save");
+  const cancelEl = document.getElementById("p-cancel");
+  const statusEl = document.getElementById("p-status");
+
+  let places = [];
+  let editingId = null;
+  let centre = null;            // [lat, lon] being placed
+
+  function allStops() {
+    return (window.GEOCACHE_DAYS || []).flatMap(d => d.stops.map(s => ({ s, date: d.date })));
+  }
+  function km(lat1, lon1, lat2, lon2) {
+    const x = (lon2 - lon1) * Math.PI / 180 * Math.cos((lat1 + lat2) / 2 * Math.PI / 180);
+    const y = (lat2 - lat1) * Math.PI / 180;
+    return 6371 * Math.hypot(x, y);
+  }
+  function inside(lat, lon, r) {
+    const hits = allStops().filter(x => km(x.s.lat, x.s.lon, lat, lon) <= r);
+    return { caches: hits.length, days: new Set(hits.map(x => x.date)).size };
+  }
+
+  // ---- map: your caches as small dots, places as circles ----
+  const map = L.map("place-map", { preferCanvas: true }).setView([53.45, -113.4], 9);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+  }).addTo(map);
+  const dots = L.layerGroup().addTo(map);
+  const placeLayer = L.layerGroup().addTo(map);
+  const editLayer = L.layerGroup().addTo(map);
+
+  function drawDots() {
+    dots.clearLayers();
+    for (const x of allStops()) {
+      L.circleMarker([x.s.lat, x.s.lon], { radius: 2, weight: 0, fillColor: "#2d6a3e", fillOpacity: 0.55, interactive: false }).addTo(dots);
+    }
+  }
+
+  function drawPlaces() {
+    placeLayer.clearLayers();
+    for (const p of places) {
+      if (p.id === editingId) continue;
+      L.circle([p.lat, p.lon], { radius: p.radiusKm * 1000, color: "#2c6fbb", weight: 2, fillOpacity: 0.08 })
+        .bindTooltip(p.name, { permanent: true, direction: "center", className: "place-label" })
+        .addTo(placeLayer);
+    }
+  }
+
+  function drawEdit() {
+    editLayer.clearLayers();
+    const r = Number(radiusEl.value);
+    radiusVal.textContent = r + " km";
+    if (!centre) {
+      infoEl.textContent = "Click the map to set the centre.";
+      return;
+    }
+    L.circle(centre, { radius: r * 1000, color: "#e3a008", weight: 3, fillOpacity: 0.15 }).addTo(editLayer);
+    L.circleMarker(centre, { radius: 5, color: "#e3a008", fillColor: "#fff", fillOpacity: 1, weight: 3 }).addTo(editLayer);
+    const n = inside(centre[0], centre[1], r);
+    infoEl.textContent = F.plural(n.caches, "cache") + " on " + F.plural(n.days, "caching day") + " inside this circle.";
+  }
+
+  map.on("click", e => { centre = [e.latlng.lat, e.latlng.lng]; drawEdit(); });
+  radiusEl.addEventListener("input", drawEdit);
+
+  // ---- list ----
+  function renderList() {
+    if (!places.length) {
+      listEl.innerHTML = '<li class="none">No places yet. Name one below, click its centre on the map and set its size.</li>';
+      return;
+    }
+    listEl.innerHTML = places.map(p => {
+      const n = inside(p.lat, p.lon, p.radiusKm);
+      return '<li' + (p.id === editingId ? ' class="editing"' : "") + '><span class="pname">' + F.esc(p.name) + "</span>" +
+        '<span class="pmeta">' + p.radiusKm + " km circle · " + F.plural(n.caches, "cache") + " · " + F.plural(n.days, "day") + "</span>" +
+        '<span class="pbtns"><button class="btn secondary small" type="button" data-show="' + p.id + '">Show</button>' +
+        '<button class="btn secondary small" type="button" data-edit="' + p.id + '">Edit</button>' +
+        '<button class="btn danger small" type="button" data-delete="' + p.id + '">Delete</button></span></li>';
+    }).join("");
+  }
+
+  listEl.addEventListener("click", e => {
+    const show = e.target.closest("[data-show]"), edit = e.target.closest("[data-edit]"), del = e.target.closest("[data-delete]");
+    if (show) { const p = places.find(x => x.id === show.dataset.show); map.fitBounds(L.latLng(p.lat, p.lon).toBounds(p.radiusKm * 2600)); }
+    if (edit) startEdit(edit.dataset.edit);
+    if (del) deletePlace(del.dataset.delete);
+  });
+
+  function resetForm() {
+    editingId = null;
+    centre = null;
+    form.reset();
+    radiusEl.value = 3;
+    document.getElementById("pf-title").textContent = "Add a place";
+    saveEl.textContent = "Add place";
+    cancelEl.hidden = true;
+    drawPlaces();
+    drawEdit();
+    renderList();
+  }
+  cancelEl.addEventListener("click", () => { statusEl.textContent = ""; resetForm(); });
+
+  function startEdit(id) {
+    const p = places.find(x => x.id === id);
+    if (!p) return;
+    editingId = id;
+    nameEl.value = p.name;
+    radiusEl.value = p.radiusKm;
+    centre = [p.lat, p.lon];
+    document.getElementById("pf-title").textContent = "Edit " + p.name;
+    saveEl.textContent = "Save changes";
+    cancelEl.hidden = false;
+    statusEl.textContent = "";
+    map.fitBounds(L.latLng(p.lat, p.lon).toBounds(p.radiusKm * 2600));
+    drawPlaces();
+    drawEdit();
+    renderList();
+    nameEl.focus();
+  }
+
+  async function save(list, doneText) {
+    form.classList.add("busy");
+    saveEl.disabled = true;
+    statusEl.innerHTML = "Saving and updating place names… (about 10 seconds)";
+    try {
+      const resp = await fetch("api/places", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ places: list })
+      });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error || "Couldn't save.");
+      places = j.places;
+      await window.refreshDashboard();
+      drawDots();
+      resetForm();
+      statusEl.innerHTML = '<span class="ok">✓ ' + F.esc(doneText) + " Day titles and Browse by Location are updated.</span>";
+    } catch (err) {
+      statusEl.innerHTML = '<span class="err">✗ ' + F.esc(err.message === "Failed to fetch" ? "Could not reach the server. Is serve.py running?" : err.message) + "</span>";
+    }
+    form.classList.remove("busy");
+    saveEl.disabled = false;
+  }
+
+  form.addEventListener("submit", e => {
+    e.preventDefault();
+    const name = nameEl.value.trim();
+    if (!name) { statusEl.innerHTML = '<span class="err">Please give the place a name.</span>'; return; }
+    if (!centre) { statusEl.innerHTML = '<span class="err">Click the map to set the place\'s centre.</span>'; return; }
+    const place = { id: editingId || "place-" + Date.now().toString(36), name,
+      lat: centre[0], lon: centre[1], radiusKm: Number(radiusEl.value) };
+    const list = editingId ? places.map(p => p.id === editingId ? place : p) : [...places, place];
+    save(list, (editingId ? "Saved " : "Added ") + name + ".");
+  });
+
+  function deletePlace(id) {
+    const p = places.find(x => x.id === id);
+    if (!p || !confirm('Delete the place "' + p.name + '"? Its caches go back to their nearest towns.')) return;
+    save(places.filter(x => x.id !== id), "Deleted " + p.name + ".");
+  }
+
+  async function load() {
+    drawDots();
+    drawEdit();
+    if (!served) {
+      listEl.innerHTML = '<li class="none">My Places can be set when the page is opened through serve.py.</li>';
+      saveEl.disabled = true;
+      return;
+    }
+    try {
+      const resp = await fetch("api/places", { cache: "no-store" });
+      if (resp.ok) places = (await resp.json()).places || [];
+    } catch (err) { /* not served */ }
+    drawPlaces();
+    renderList();
+  }
+  load();
 })();
 </script>
 </body>

@@ -487,6 +487,40 @@ def label_canadian_stop(grid, bounds, muni, lat, lon):
     return (best_town, best_near, area)
 
 
+# ---------------------------------------------------------------------------
+# My Places (places.json, set on the Dashboard): Grant's own named areas, such
+# as Ministik or Blackfoot, each a centre point and a radius. A cache inside
+# one is credited to that place instead of the nearest town, in day titles and
+# in Browse by Location. Where places overlap, the one whose centre is
+# closest wins.
+# ---------------------------------------------------------------------------
+
+MY_PLACES_PATH = HERE / "places.json"
+
+
+def load_my_places():
+    try:
+        data = json.loads(MY_PLACES_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return []
+    places = []
+    for p in data.get("places", []):
+        try:
+            places.append((str(p["name"]), float(p["lat"]), float(p["lon"]), float(p["radiusKm"])))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return places
+
+
+def my_place_for(places, lat, lon):
+    best, best_d = None, None
+    for name, plat, plon, radius in places:
+        d = km_between(lat, lon, plat, plon)
+        if d <= radius and (best_d is None or d < best_d):
+            best, best_d = name, d
+    return best
+
+
 def stop_region(s):
     parts = []
     if s["state"] and s["state"] != "None":
@@ -614,6 +648,16 @@ def main():
             s["town"], s["near"], s["area"] = memo[key]
     else:
         print("No place-name file yet (run build_places.py); titles will show the province/state only.")
+
+    my_places = load_my_places()
+    if my_places:
+        moved = 0
+        for s in all_stops:
+            name = my_place_for(my_places, s["lat"], s["lon"])
+            if name:
+                s["town"], s["near"], s["area"] = name, False, ""
+                moved += 1
+        print(f"My Places: {len(my_places)} places, {moved} logs credited to them")
 
     out = []
     for day in sorted(days, reverse=True):

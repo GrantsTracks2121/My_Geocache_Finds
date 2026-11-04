@@ -134,3 +134,32 @@ details.fold .fold-body { padding: 0 16px 14px; }
 details.fold .fold-body h3 { margin: 14px 0 8px; font-size: 12px; font-weight: 600; color: var(--muted);
   text-transform: uppercase; letter-spacing: 0.06em; }
 details.fold .fold-body > :first-child { margin-top: 0; }
+
+/* My Places (Dashboard settings) */
+.places-panel { margin-top: 12px; }
+.place-list { list-style: none; margin: 10px 0 12px; padding: 0; }
+.place-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 10px;
+  border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }
+.place-list li.editing { border-color: var(--gold); }
+.place-list li.none { color: var(--muted); font-style: italic; font-size: 13px; border-style: dashed; }
+.place-list .pname { font-weight: 600; min-width: 140px; }
+.place-list .pmeta { flex: 1; color: var(--muted); font-size: 13px; }
+.place-list .pbtns { display: flex; gap: 6px; }
+.place-editor { display: grid; grid-template-columns: 260px 1fr; gap: 14px; }
+.place-form { display: flex; flex-direction: column; gap: 10px; }
+.place-form.busy { opacity: .7; }
+.place-form .pf-title { font-weight: 600; }
+.place-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--muted); }
+.place-form input[type=text] { font: inherit; font-size: 14px; color: var(--ink); padding: 7px 10px;
+  border: 1px solid var(--line); border-radius: 6px; }
+.place-form input[type=range] { width: 100%; accent-color: var(--accent); }
+.place-form .pf-info { font-size: 13px; color: var(--ink); background: #f6f6f2; border-radius: 6px; padding: 8px 10px; }
+.place-form .pf-actions { display: flex; gap: 8px; }
+.place-form .pf-status { font-size: 13px; }
+.place-form .pf-status .ok { color: var(--accent); }
+.place-form .pf-status .err { color: var(--danger); }
+#place-map { height: 360px; border: 1px solid var(--line); border-radius: 8px; cursor: crosshair; }
+.place-label { background: rgba(255,255,255,.85); border: none; box-shadow: none; font-weight: 600;
+  color: #1f4f8f; padding: 1px 5px; }
+.place-label::before { display: none; }
+@media (max-width: 700px) { .place-editor { grid-template-columns: 1fr; } }
