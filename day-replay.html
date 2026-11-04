@@ -71,6 +71,17 @@
     background: var(--panel);
     border-bottom: 1px solid var(--line);
   }
+  #bar #favStar {
+    font: 24px/1 sans-serif;
+    width: 32px; height: 32px; padding: 0;
+    border: none; border-radius: 6px;
+    background: none; color: #b8b2a6;
+    cursor: pointer;
+  }
+  #bar #favStar:hover:not(:disabled) { background: #f3f1ea; }
+  #bar #favStar.on { color: #e3a008; }
+  #bar #favStar:disabled { opacity: .35; cursor: default; }
+  #days .fav { color: #e3a008; margin-left: 4px; }
   #dayTitle { font-size: 16px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #progress { color: var(--muted); font-variant-numeric: tabular-nums; }
   #bar button {
@@ -164,6 +175,7 @@
 
 <section id="main">
   <div id="bar">
+    <button id="favStar" type="button" aria-pressed="false" disabled>☆</button>
     <div id="dayTitle">Choose a day</div>
     <span id="progress"></span>
     <label>Speed
@@ -277,7 +289,7 @@
     const note = L.control({ position: "topright" });
     note.onAdd = function () {
       const div = L.DomUtil.create("div", "legend");
-      div.innerHTML = "Map tiles need the local server.<br>In Terminal, in this folder: <b>python3 -m http.server 8002</b><br>then open <b>http://localhost:8002/day-replay.html</b>";
+      div.innerHTML = "Map tiles and favourites need the local server.<br>In Terminal, in this folder: <b>python3 serve.py</b><br>then open <b>http://localhost:8002/day-replay.html</b>";
       return div;
     };
     note.addTo(map);
@@ -341,7 +353,8 @@
     listEl.innerHTML = shown.map(d => {
       const n = d.stops.length;
       return '<li data-date="' + d.date + '">' +
-        '<div class="date">' + prettyDate(d.date) + "</div>" +
+        '<div class="date">' + prettyDate(d.date) +
+          (favorites.has(d.date) ? '<span class="fav" title="Favourite">★</span>' : "") + "</div>" +
         '<div class="meta">' + escapeHtml(autoTitle(d)) + " · " + n + (n === 1 ? " stop" : " stops") + "</div>" +
         "</li>";
     }).join("");
@@ -368,6 +381,60 @@
   });
 
   let currentDate = null;
+
+  // ---------- favourites (saved to favorites.json by serve.py) ----------
+  const favorites = new Set();
+  const starEl = document.getElementById("favStar");
+  let favoritesReady = false;
+
+  function updateStar() {
+    const on = favorites.has(currentDate);
+    starEl.textContent = on ? "★" : "☆";
+    starEl.classList.toggle("on", on);
+    starEl.setAttribute("aria-pressed", String(on));
+    starEl.disabled = !favoritesReady || !currentDate;
+    starEl.title = !favoritesReady
+      ? "Favourites need the page opened with python3 serve.py"
+      : on ? "Remove from favourites" : "Add to favourites";
+  }
+
+  async function loadFavorites() {
+    try {
+      const resp = await fetch("api/favorites", { cache: "no-store" });
+      if (!resp.ok) throw new Error(resp.status);
+      (await resp.json()).days.forEach(d => favorites.add(d));
+      favoritesReady = true;
+    } catch (err) {
+      favoritesReady = false;
+    }
+    renderList();
+    updateStar();
+  }
+
+  async function toggleFavorite() {
+    if (!currentDate || !favoritesReady) return;
+    const date = currentDate;
+    const wasOn = favorites.has(date);
+    if (wasOn) favorites.delete(date); else favorites.add(date);
+    updateStar();
+    renderList();
+    try {
+      const resp = await fetch("api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ days: [...favorites] })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+    } catch (err) {
+      if (wasOn) favorites.add(date); else favorites.delete(date);
+      updateStar();
+      renderList();
+      alert("Couldn't save the favourite. Is serve.py still running?");
+    }
+  }
+
+  starEl.addEventListener("click", toggleFavorite);
+
   function markActive() {
     listEl.querySelectorAll("li").forEach(li => {
       const on = li.dataset.date === currentDate;
@@ -385,6 +452,7 @@
   function selectDay(date) {
     currentDate = date;
     markActive();
+    updateStar();
     play();
   }
 
@@ -521,6 +589,7 @@
   fillMonths(DAYS[0].date.slice(5, 7));
   renderList();
   selectDay(DAYS[0].date);
+  loadFavorites();
 })();
 </script>
 </body>
