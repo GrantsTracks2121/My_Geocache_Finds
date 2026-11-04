@@ -83,7 +83,40 @@
     cursor: pointer;
   }
   #bar label { color: var(--muted); }
-  #map { flex: 1; }
+  #mapWrap { flex: 1; position: relative; min-height: 0; }
+  #map { position: absolute; inset: 0; }
+
+  /* Cache panel: opens on the right when a cache is clicked */
+  #panel {
+    position: absolute;
+    top: 0; right: 0; bottom: 0;
+    width: min(400px, 100%);
+    z-index: 1000;
+    background: var(--panel);
+    border-left: 1px solid var(--line);
+    box-shadow: -2px 0 10px rgba(0,0,0,.15);
+    overflow-y: auto;
+    padding: 18px 20px 24px;
+  }
+  #panel[hidden] { display: none; }
+  #panel .close {
+    position: absolute; top: 10px; right: 10px;
+    width: 30px; height: 30px;
+    font: 18px/1 sans-serif; color: var(--muted);
+    background: none; border: none; border-radius: 6px; cursor: pointer;
+  }
+  #panel .close:hover { background: #eee; color: var(--ink); }
+  #panel h2 { font-size: 17px; margin: 0 30px 8px 0; line-height: 1.3; }
+  #panel .facts { margin: 0 0 4px; }
+  #panel .facts a { font-weight: 600; color: var(--accent); }
+  #panel .muted { color: var(--muted); }
+  #panel .log {
+    margin-top: 14px; padding-top: 14px;
+    border-top: 1px solid var(--line);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    font-size: 14px; line-height: 1.5;
+  }
 
   .legend {
     background: rgba(255,255,255,.92);
@@ -142,7 +175,13 @@
     </label>
     <button id="replay" type="button">Replay</button>
   </div>
-  <div id="map"></div>
+  <div id="mapWrap">
+    <div id="map"></div>
+    <aside id="panel" hidden aria-label="Cache details">
+      <button class="close" type="button" aria-label="Close">✕</button>
+      <div id="panelBody"></div>
+    </aside>
+  </div>
 </section>
 
 <script src="lib/leaflet.js"></script>
@@ -366,16 +405,55 @@
     });
     const marker = L.marker([stop.lat, stop.lon], { icon: icon, zIndexOffset: index }).addTo(dayLayer);
     marker.bindTooltip((index + 1) + ". " + escapeHtml(stop.name), { direction: "top" });
-    marker.bindPopup(
-      "<b>" + escapeHtml(stop.name) + "</b><br>" +
-      escapeHtml(stop.type) + "<br>" +
-      (stop.town ? escapeHtml((stop.near ? "near " : "") + stop.town + (stop.area ? " (" + stop.area + ")" : "")) + "<br>" : "") +
-      escapeHtml(stop.log) + " · stop " + (index + 1) + "<br>" +
-      '<a href="https://coord.info/' + encodeURIComponent(stop.code) + '" target="_blank" rel="noopener">' + escapeHtml(stop.code) + "</a>" +
-      (stop.url ? ' · <a href="' + escapeHtml(stop.url) + '" target="_blank" rel="noopener">brass cap page</a>' : "")
-    );
+    marker.on("click", () => openPanel(stop, index));
     return marker;
   }
+
+  // ---------- cache panel ----------
+  const panelEl = document.getElementById("panel");
+  const panelBody = document.getElementById("panelBody");
+
+  function openPanel(stop, index) {
+    const day = DAYS.find(d => d.date === currentDate);
+    const place = stop.town
+      ? (stop.near ? "near " : "") + stop.town + (stop.area ? " (" + stop.area + ")" : "")
+      : "";
+    panelBody.innerHTML =
+      "<h2>" + escapeHtml(stop.name) + "</h2>" +
+      '<p class="facts"><a href="https://coord.info/' + encodeURIComponent(stop.code) +
+        '" target="_blank" rel="noopener">' + escapeHtml(stop.code) + "</a> · " + escapeHtml(stop.type) + "</p>" +
+      (place ? '<p class="facts">' + escapeHtml(place) + "</p>" : "") +
+      '<p class="facts">' + escapeHtml(stop.log) + " · " + prettyDate(day.date) +
+        ' <span class="muted">· stop ' + (index + 1) + " of " + day.stops.length + "</span></p>" +
+      (stop.url ? '<p class="facts"><a href="' + escapeHtml(stop.url) + '" target="_blank" rel="noopener">Brass cap page</a></p>' : "") +
+      (stop.text
+        ? '<div class="log">' + formatLog(stop.text) + "</div>"
+        : '<div class="log muted">Log not in My Finds file.</div>');
+    panelEl.hidden = false;
+    panelEl.scrollTop = 0;
+  }
+
+  // Log text is plain text with Geocaching.com's old formatting codes:
+  // [b]bold[/b], [i]italic[/i], [u]underline[/u], [url=...]link[/url].
+  function formatLog(text) {
+    let h = escapeHtml(text);
+    // Repeat so codes nested inside other codes ([b]..[i]..[/i]..[/b]) convert too
+    for (let before = ""; before !== h; ) {
+      before = h;
+      h = h.replace(/\[(b|i|u|s)\]([\s\S]*?)\[\/\1\]/gi, "<$1>$2</$1>");
+    }
+    h = h.replace(/\[url=(https?:\/\/[^\]\s]+)\]([\s\S]*?)\[\/url\]/gi,
+      '<a href="$1" target="_blank" rel="noopener">$2</a>');
+    h = h.replace(/\[url\](https?:\/\/[^\[\s]+)\[\/url\]/gi,
+      '<a href="$1" target="_blank" rel="noopener">$1</a>');
+    return h;
+  }
+
+  function closePanel() { panelEl.hidden = true; }
+
+  panelEl.querySelector(".close").addEventListener("click", closePanel);
+  map.on("click", closePanel);
+  document.addEventListener("keydown", e => { if (e.key === "Escape") closePanel(); });
 
   function wait(ms, token) {
     return new Promise(resolve => setTimeout(() => resolve(token === runToken), ms));
@@ -404,6 +482,7 @@
     const stops = day.stops;
 
     dayLayer.clearLayers();
+    closePanel();
     titleEl.textContent = prettyDate(day.date) + " — " + autoTitle(day);
 
     const points = stops.map(s => [s.lat, s.lon]);

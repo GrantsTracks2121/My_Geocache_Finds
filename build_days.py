@@ -74,6 +74,29 @@ def text(el, tag):
     return found.text.strip() if found is not None and found.text else ""
 
 
+# Geocaching.com's old bracketed smiley codes, shown as emoji in the log panel
+SMILEYS = {
+    "[:)]": "🙂", "[:D]": "😀", "[8D]": "😎", "[:I]": "😳", "[:P]": "😛",
+    "[}:)]": "😈", "[;)]": "😉", "[:o)]": "🤡", "[B)]": "🤕", "[8]": "🎱",
+    "[:(]": "🙁", "[8)]": "😊", "[:O]": "😮", "[:(!]": "😠", "[xx(]": "😵",
+    "[|)]": "😴", "[:X]": "😘", "[^]": "👍", "[V]": "👎", "[?]": "❓",
+    "[:0]": "😮", "[:-)]": "🙂",
+}
+SMILEYS_LOWER = {k.lower(): v for k, v in SMILEYS.items()}
+SMILEY_RE = re.compile("|".join(re.escape(k) for k in sorted(SMILEYS, key=len, reverse=True)), re.I)
+# "This entry was edited by Coolcat21 on ..." notes, with or without brackets
+EDITED_RE = re.compile(r"\[?This entry was edited by [^\n\]]*\]?", re.I)
+BR_RE = re.compile(r"<br\s*/?>", re.I)
+
+
+def clean_log(raw):
+    """Log text for the panel: smiley codes as emoji, 'edited by' notes removed."""
+    t = BR_RE.sub("\n", raw)
+    t = EDITED_RE.sub("", t)
+    t = SMILEY_RE.sub(lambda m: SMILEYS_LOWER[m.group(0).lower()], t)
+    return re.sub(r"\n{3,}", "\n\n", t).strip()
+
+
 # ---------------------------------------------------------------------------
 # Alberta Brass Cap Cache (GC43F3)
 #
@@ -565,6 +588,7 @@ def main():
             stop = dict(base)
             stop["log"] = kind
             stop["logId"] = int(log.get("id"))
+            stop["text"] = clean_log(text(log, "text"))
             if base["code"] in BRASS_CAP_CODES:
                 stop = place_brass_cap(stop, text(log, "text"), log.get("id"))
             days[log_day(text(log, "date"), stop["lon"])].append(stop)
