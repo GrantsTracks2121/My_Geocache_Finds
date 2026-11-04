@@ -41,6 +41,9 @@
     border-bottom: 1px solid var(--line);
   }
   #sidebar h1 { font-size: 17px; margin: 0 0 10px; }
+  #sidebar .back { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent);
+    text-decoration: none; margin-bottom: 6px; }
+  #sidebar .back:hover { text-decoration: underline; }
   #sidebar .filters { display: flex; gap: 8px; }
   #sidebar select {
     font: inherit;
@@ -173,6 +176,7 @@
 
 <aside id="sidebar">
   <header>
+    <a class="back" href="index.html">← Dashboard</a>
     <h1>Geocaching Days Replay</h1>
     <div class="filters">
       <select id="yearFilter" aria-label="Year"></select>
@@ -632,12 +636,15 @@
     titleEl.textContent = "No data found. Run build_days.py first.";
     return;
   }
-  // Open on the most recent year and month with caching days
-  yearEl.value = DAYS[0].date.slice(0, 4);
-  fillMonths(DAYS[0].date.slice(5, 7));
+  // Open on the day named in the address (day-replay.html?date=2026-10-14,
+  // used by the Dashboard's favourites), or else the most recent day.
+  const asked = new URLSearchParams(location.search).get("date");
+  const startDate = DAYS.some(d => d.date === asked) ? asked : DAYS[0].date;
+  yearEl.value = startDate.slice(0, 4);
+  fillMonths(startDate.slice(5, 7));
   renderList();
   loadFavorites();
-  loadSettings().then(() => selectDay(DAYS[0].date));
+  loadSettings().then(() => selectDay(startDate));
 })();
 </script>
 </body>

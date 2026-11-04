@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>My Geocache Finds</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<nav class="site-nav">
+  <a href="index.html" class="here">Dashboard</a>
+  <a href="day-replay.html">Browse by Date</a>
+  <span class="later" title="Coming soon">Browse by Location</span>
+</nav>
+
+<h1>My Geocache Finds</h1>
+<p class="subtitle" id="summary">–</p>
+<div id="file-notice" class="notice" hidden>
+  You opened this page as a file, so favourites, settings and loading a new My Finds file won't work.
+  In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
+  then open <a href="http://localhost:8002/">http://localhost:8002/</a>.
+</div>
+
+<div class="sections">
+  <a class="section-card" href="day-replay.html">
+    <h3>Browse by Date</h3>
+    <p>Replay any caching day on the map, by year and month.</p>
+    <div class="figures" id="date-figures">–</div>
+  </a>
+  <div class="section-card later">
+    <h3>Browse by Location <span class="soon">Coming soon</span></h3>
+    <p>Your finds by country, province and state.</p>
+    <div class="figures" id="place-figures">–</div>
+  </div>
+  <div class="section-card later">
+    <h3>Trips <span class="soon">Coming soon</span></h3>
+    <p>Group caching days into a named trip.</p>
+    <div class="figures">&nbsp;</div>
+  </div>
+</div>
+
+<h2>Favourite days</h2>
+<div id="favorites"><div class="empty">Loading…</div></div>
+
+<h2>Settings</h2>
+<div class="panel">
+  <div class="setting">
+    <span class="sname">Sequence of Daily Finds</span>
+    <div class="choice" role="radiogroup" aria-label="Sequence of Daily Finds">
+      <label><input type="radio" name="dailyFindsSequence" value="auto">Auto</label>
+      <label><input type="radio" name="dailyFindsSequence" value="manual">Manual</label>
+    </div>
+    <span class="saved" id="settings-saved"></span>
+    <span class="sdesc">Auto plays the finding sequence as soon as you choose a day. Manual shows all the day's caches at once; press Play to see the sequence.</span>
+  </div>
+</div>
+
+<h2>Update the data</h2>
+<div class="dropzone" id="finds-drop">
+  <div class="dz-title">My Finds Pocket Query</div>
+  <div class="dz-sub">Drop the .zip or .gpx here (or click to choose).<br>
+    Replaces your finds: every caching day, place name and log is rebuilt from it. This takes about half a minute.</div>
+</div>
+
+<script src="data/days.js"></script>
+<script>
+(function () {
+  "use strict";
+  const served = location.protocol.startsWith("http");
+  if (!served) document.getElementById("file-notice").hidden = false;
+
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const num = n => n.toLocaleString("en-CA");
+  function prettyDate(iso) {
+    const [y, m, d] = iso.split("-").map(Number);
+    return WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()] + " " + d + " " + MONTHS[m - 1] + " " + y;
+  }
+  const monthYear = iso => MONTHS[Number(iso.slice(5, 7)) - 1] + " " + iso.slice(0, 4);
+  const FIND_LOGS = new Set(["Found it", "Attended", "Webcam Photo Taken"]);
+
+  let favoriteDays = [];
+
+  function render() {
+    const DAYS = window.GEOCACHE_DAYS || [];
+    const SRC = window.GEOCACHE_SOURCE || {};
+    if (!DAYS.length) {
+      document.getElementById("summary").textContent = "No finds loaded yet. Drop your My Finds Pocket Query below.";
+      return;
+    }
+    const stops = DAYS.flatMap(d => d.stops);
+    const finds = stops.filter(s => FIND_LOGS.has(s.log)).length;
+    const dnfs = stops.filter(s => s.log === "Didn't find it").length;
+    const years = new Set(DAYS.map(d => d.date.slice(0, 4))).size;
+    const newest = DAYS[0].date, oldest = DAYS[DAYS.length - 1].date;
+
+    document.getElementById("summary").textContent =
+      num(stops.length) + " logs on " + num(DAYS.length) + " caching days, " +
+      monthYear(oldest) + " – " + monthYear(newest) +
+      (SRC.file ? " · from " + SRC.file + (SRC.generated ? " (Pocket Query of " + prettyDate(SRC.generated).slice(4) + ")" : "") : "");
+
+    document.getElementById("date-figures").innerHTML =
+      "<strong>" + num(DAYS.length) + "</strong> caching days · <strong>" + years + "</strong> years<br>" +
+      "<strong>" + num(finds) + "</strong> finds · " + num(dnfs) + " DNFs";
+
+    const countries = new Set(stops.map(s => s.country).filter(Boolean));
+    const regions = new Set(stops.filter(s => s.state && s.state !== "None").map(s => s.state + "|" + s.country));
+    document.getElementById("place-figures").innerHTML =
+      "<strong>" + countries.size + "</strong> countries · <strong>" + regions.size + "</strong> provinces &amp; states";
+
+    renderFavorites();
+  }
+
+  function renderFavorites() {
+    const box = document.getElementById("favorites");
+    if (!served) {
+      box.innerHTML = '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
+      return;
+    }
+    const byDate = new Map((window.GEOCACHE_DAYS || []).map(d => [d.date, d]));
+    const days = favoriteDays.filter(d => byDate.has(d)).sort().reverse();
+    if (!days.length) {
+      box.innerHTML = '<div class="empty">No favourite days yet. Click the ☆ beside a day\'s date in Browse by Date.</div>';
+      return;
+    }
+    box.innerHTML = '<ul class="fav-list">' + days.map(date => {
+      const d = byDate.get(date), n = d.stops.length;
+      return '<li><a href="day-replay.html?date=' + date + '">' +
+        '<span class="star">★</span>' +
+        '<span class="fdate">' + prettyDate(date) + "</span>" +
+        '<span class="fplace">' + esc(d.title || "") + "</span>" +
+        '<span class="fcount">' + n + (n === 1 ? " cache" : " caches") + "</span></a></li>";
+    }).join("") + "</ul>";
+  }
+
+  // ---------- favourites and settings from serve.py ----------
+  async function loadFavorites() {
+    try {
+      const resp = await fetch("api/favorites", { cache: "no-store" });
+      if (resp.ok) favoriteDays = (await resp.json()).days || [];
+    } catch (err) { /* not served */ }
+    renderFavorites();
+  }
+
+  const radios = [...document.querySelectorAll('input[name="dailyFindsSequence"]')];
+  const savedEl = document.getElementById("settings-saved");
+  async function loadSettings() {
+    let mode = "auto";
+    try {
+      const resp = await fetch("api/settings", { cache: "no-store" });
+      if (resp.ok) mode = (await resp.json()).dailyFindsSequence;
+    } catch (err) {
+      radios.forEach(r => r.disabled = true);
+    }
+    radios.forEach(r => r.checked = r.value === mode);
+  }
+  radios.forEach(r => r.addEventListener("change", async () => {
+    savedEl.textContent = "";
+    try {
+      const resp = await fetch("api/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ dailyFindsSequence: r.value })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+      savedEl.textContent = "Saved";
+      setTimeout(() => { savedEl.textContent = ""; }, 2000);
+    } catch (err) {
+      savedEl.textContent = "Couldn't save. Is serve.py running?";
+      loadSettings();
+    }
+  }));
+
+  // ---------- My Finds drop zone ----------
+  const drop = document.getElementById("finds-drop");
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = ".gpx,.zip";
+  drop.appendChild(input);
+  const status = document.createElement("div");
+  status.className = "dz-status";
+  drop.appendChild(status);
+  let busy = false;
+
+  function reloadDays() {
+    return new Promise(resolve => {
+      const s = document.createElement("script");
+      s.src = "data/days.js?t=" + Date.now();
+      s.onload = s.onerror = () => { s.remove(); resolve(); };
+      document.head.appendChild(s);
+    });
+  }
+
+  async function send(file) {
+    if (busy || !file) return;
+    if (!served) {
+      status.innerHTML = '<span class="err">Start serve.py and open http://localhost:8002/ to load a file.</span>';
+      return;
+    }
+    busy = true;
+    drop.classList.add("busy");
+    status.textContent = file.name + ": loading and rebuilding… (about half a minute)";
+    try {
+      const resp = await fetch("api/upload/finds", {
+        method: "POST",
+        headers: { "X-Filename": encodeURIComponent(file.name) },
+        body: file
+      });
+      const j = await resp.json();
+      if (j.ok) {
+        const diff = j.logs - (j.previousLogs || 0);
+        status.innerHTML = '<span class="ok">✓ ' + esc(j.file) + ":</span> " + num(j.days) + " caching days, " +
+          num(j.logs) + " logs" + (j.previousLogs ? " (" + (diff >= 0 ? "+" : "") + num(diff) + " since the last file)" : "") + ".";
+        await reloadDays();
+        render();
+      } else {
+        status.innerHTML = '<span class="err">✗ ' + esc(j.error || "Something went wrong.") + "</span>";
+      }
+    } catch (err) {
+      status.innerHTML = '<span class="err">✗ Could not reach the server. Is serve.py running?</span>';
+    }
+    busy = false;
+    drop.classList.remove("busy");
+  }
+
+  drop.addEventListener("click", () => { if (!busy) input.click(); });
+  input.addEventListener("click", e => e.stopPropagation());
+  input.addEventListener("change", () => { send(input.files[0]); input.value = ""; });
+  drop.addEventListener("dragover", e => { e.preventDefault(); drop.classList.add("over"); });
+  drop.addEventListener("dragleave", () => drop.classList.remove("over"));
+  drop.addEventListener("drop", e => {
+    e.preventDefault();
+    drop.classList.remove("over");
+    send(e.dataTransfer.files[0]);
+  });
+  // A file dropped just outside the box shouldn't open in the browser
+  window.addEventListener("dragover", e => e.preventDefault());
+  window.addEventListener("drop", e => e.preventDefault());
+
+  render();
+  loadFavorites();
+  loadSettings();
+})();
+</script>
+</body>
+</html>

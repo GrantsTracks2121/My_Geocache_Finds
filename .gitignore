@@ -21,3 +21,7 @@ geonames/
 
 # Statistics Canada boundary download and lookup file (large; rebuilt by build_boundaries.py)
 boundaries/
+
+# Temporary files while loading a dropped My Finds file (serve.py)
+.upload.tmp
+*.gpx.bak
