@@ -3,7 +3,7 @@
 My Geocache Finds - local web server.
 
 Shows the pages in this folder (like `python3 -m http.server`) and also:
-  - saves your favourite days to favorites.json
+  - saves your favourite days and trips to favorites.json
   - saves site-wide settings to settings.json
   - saves your trips (a name and a date range) to trips.json
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
@@ -71,6 +71,7 @@ def read_favorites():
     except (FileNotFoundError, ValueError):
         data = {}
     data.setdefault("days", [])
+    data.setdefault("trips", [])
     return data
 
 
@@ -258,15 +259,19 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(200, settings)
 
     def post_favorites(self):
+        """Replace the favourite days and/or favourite trips the page sends;
+        whichever list isn't sent is kept as it was."""
         try:
             incoming = self.read_body()
-            days = sorted({d for d in incoming.get("days", []) if isinstance(d, str) and DATE_RE.match(d)},
-                          reverse=True)
-        except (ValueError, AttributeError):
+            data = read_favorites()
+            if "days" in incoming:
+                data["days"] = sorted({d for d in incoming["days"] if isinstance(d, str) and DATE_RE.match(d)},
+                                      reverse=True)
+            if "trips" in incoming:
+                data["trips"] = sorted({i for i in incoming["trips"] if isinstance(i, str) and TRIP_ID_RE.match(i)})
+        except (ValueError, AttributeError, TypeError):
             self.send_json(400, {"error": "bad favourites data"})
             return
-        data = read_favorites()
-        data["days"] = days
         write_json(FAVORITES_PATH, data)
         self.send_json(200, data)
 

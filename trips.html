@@ -75,6 +75,7 @@
 
   let trips = [];
   let editingId = null;
+  let favTrips = new Set();      // ids of favourite trips (favorites.json)
 
   function summary(trip) {
     const days = F.tripDays(trip, DAYS);
@@ -96,7 +97,9 @@
       const span = F.daySpan(t.start, t.end);
       return '<li data-id="' + F.esc(t.id) + '"' + (t.id === editingId ? ' class="editing"' : "") + ">" +
         '<div class="tinfo" data-open="' + F.esc(t.id) + '">' +
-          '<a class="tname" href="day-replay.html?trip=' + encodeURIComponent(t.id) + '">' + F.esc(t.name) + "</a>" +
+          '<div class="trow"><a class="tname" href="day-replay.html?trip=' + encodeURIComponent(t.id) + '">' + F.esc(t.name) + "</a>" +
+            '<button class="tstar' + (favTrips.has(t.id) ? " on" : "") + '" type="button" data-star="' + F.esc(t.id) + '" aria-pressed="' + favTrips.has(t.id) + '" title="' +
+            (favTrips.has(t.id) ? "Remove from favourites" : "Add to favourites") + '">' + (favTrips.has(t.id) ? "★" : "☆") + "</button></div>" +
           '<div class="tdates">' + F.dateRange(t.start, t.end) + ' <span class="muted">(' + F.plural(span, "day") + ")</span></div>" +
           '<div class="tstats">' + (s.days.length
             ? F.plural(s.days.length, "caching day") + " · " + F.plural(s.stops.length, "cache") + (s.where ? " · " + F.esc(s.where) : "")
@@ -112,6 +115,8 @@
 
   // Clicking anywhere on a trip's details opens it
   listEl.addEventListener("click", e => {
+    const star = e.target.closest("[data-star]");
+    if (star) { toggleFavorite(star.dataset.star); return; }
     const edit = e.target.closest("[data-edit]");
     const del = e.target.closest("[data-delete]");
     const open = e.target.closest("[data-open]");
@@ -222,12 +227,34 @@
     history.replaceState(null, "", location.pathname);
   }
 
+  async function toggleFavorite(id) {
+    const wasOn = favTrips.has(id);
+    if (wasOn) favTrips.delete(id); else favTrips.add(id);
+    render();
+    try {
+      const resp = await fetch("api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trips: [...favTrips] })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+    } catch (err) {
+      if (wasOn) favTrips.add(id); else favTrips.delete(id);
+      render();
+      alert("Couldn't save the favourite. Is serve.py running?");
+    }
+  }
+
   async function load() {
     if (!served) { render(); return; }
     try {
-      const resp = await fetch("api/trips", { cache: "no-store" });
-      if (!resp.ok) throw new Error(resp.status);
-      trips = (await resp.json()).trips || [];
+      const [tr, fv] = await Promise.all([
+        fetch("api/trips", { cache: "no-store" }),
+        fetch("api/favorites", { cache: "no-store" })
+      ]);
+      if (!tr.ok) throw new Error(tr.status);
+      trips = (await tr.json()).trips || [];
+      if (fv.ok) favTrips = new Set((await fv.json()).trips || []);
     } catch (err) {
       listEl.innerHTML = '<div class="empty">Couldn\'t load trips. Is serve.py running?</div>';
       return;

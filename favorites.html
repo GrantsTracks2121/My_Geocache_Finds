@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Favourite Days</title>
+<title>Favourites</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="site.css">
 </head>
@@ -15,15 +15,23 @@
   <a href="favorites.html" class="here">Favourites</a>
 </nav>
 
-<h1>Favourite Days</h1>
-<p class="subtitle" id="summary">Newest first. Click a day to replay it.</p>
+<h1>Favourites</h1>
+<p class="subtitle" id="summary">Your favourite trips and days, newest first.</p>
 <div id="file-notice" class="notice" hidden>
   You opened this page as a file, so favourites can't be loaded.
   In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
   then open <a href="http://localhost:8002/favorites.html">http://localhost:8002/favorites.html</a>.
 </div>
 
-<div id="favorites"><div class="empty">Loading…</div></div>
+<details class="fold" id="fold-trips" open>
+  <summary>Favourite Trips <span class="count" id="trips-count"></span></summary>
+  <div class="fold-body" id="fav-trips"><div class="empty">Loading…</div></div>
+</details>
+
+<details class="fold" id="fold-days" open>
+  <summary>Favourite Days <span class="count" id="days-count"></span></summary>
+  <div class="fold-body" id="fav-days"><div class="empty">Loading…</div></div>
+</details>
 
 <script src="data/days.js"></script>
 <script src="common.js"></script>
@@ -31,22 +39,56 @@
 (function () {
   "use strict";
   const F = window.Finds;
+  const DAYS = window.GEOCACHE_DAYS || [];
   const served = location.protocol.startsWith("http");
-  const box = document.getElementById("favorites");
+  const tripsBox = document.getElementById("fav-trips");
+  const daysBox = document.getElementById("fav-days");
+
+  // Remember which sections are open or closed (just in this browser)
+  ["fold-trips", "fold-days"].forEach(id => {
+    const el = document.getElementById(id);
+    try {
+      const saved = localStorage.getItem(id);
+      if (saved !== null) el.open = saved === "open";
+    } catch (err) { /* storage unavailable: start open */ }
+    el.addEventListener("toggle", () => {
+      try { localStorage.setItem(id, el.open ? "open" : "closed"); } catch (err) { /* ignore */ }
+    });
+  });
+
   if (!served) {
     document.getElementById("file-notice").hidden = false;
-    box.innerHTML = '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
+    tripsBox.innerHTML = daysBox.innerHTML =
+      '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
     return;
   }
 
-  function render(favoriteDays) {
-    const byDate = new Map((window.GEOCACHE_DAYS || []).map(d => [d.date, d]));
-    const days = favoriteDays.filter(d => byDate.has(d)).sort().reverse();
-    document.getElementById("summary").textContent = days.length
-      ? F.plural(days.length, "favourite day") + ", newest first. Click a day to replay it."
-      : "Newest first. Click a day to replay it.";
+  function renderTrips(favIds, trips) {
+    const list = trips.filter(t => favIds.includes(t.id))
+      .sort((a, b) => (b.start + b.end).localeCompare(a.start + a.end));
+    document.getElementById("trips-count").textContent = "· " + list.length;
+    if (!list.length) {
+      tripsBox.innerHTML = '<div class="empty">No favourite trips yet. Click the ☆ beside a trip\'s name on the Trips page.</div>';
+      return;
+    }
+    tripsBox.innerHTML = '<ul class="fav-list">' + list.map(t => {
+      const days = F.tripDays(t, DAYS);
+      const stops = days.flatMap(d => d.stops);
+      return '<li><a href="day-replay.html?trip=' + encodeURIComponent(t.id) + '">' +
+        '<span class="star">★</span>' +
+        '<span class="fdate">' + F.esc(t.name) + "</span>" +
+        '<span class="fplace">' + F.dateRange(t.start, t.end) +
+          (stops.length ? ' <span class="muted">· ' + F.esc(F.regionsText(stops)) + "</span>" : "") + "</span>" +
+        '<span class="fcount">' + F.plural(days.length, "day") + " · " + F.plural(stops.length, "cache") + "</span></a></li>";
+    }).join("") + "</ul>";
+  }
+
+  function renderDays(favDays) {
+    const byDate = new Map(DAYS.map(d => [d.date, d]));
+    const days = favDays.filter(d => byDate.has(d)).sort().reverse();
+    document.getElementById("days-count").textContent = "· " + days.length;
     if (!days.length) {
-      box.innerHTML = '<div class="empty">No favourite days yet. Click the ☆ beside a day\'s date in Browse by Date.</div>';
+      daysBox.innerHTML = '<div class="empty">No favourite days yet. Click the ☆ beside a day\'s date in Browse by Date.</div>';
       return;
     }
     // One heading per year so a long list is easy to scan
@@ -56,22 +98,27 @@
         if (year) html += "</ul>";
         year = date.slice(0, 4);
         const n = days.filter(d => d.startsWith(year)).length;
-        html += "<h2>" + year + ' <span class="muted">· ' + F.plural(n, "day") + "</span></h2><ul class=\"fav-list\">";
+        html += "<h3>" + year + " · " + F.plural(n, "day") + '</h3><ul class="fav-list">';
       }
-      const d = byDate.get(date), n = d.stops.length;
+      const d = byDate.get(date);
       html += '<li><a href="day-replay.html?date=' + date + '">' +
         '<span class="star">★</span>' +
         '<span class="fdate">' + F.prettyDate(date) + "</span>" +
         '<span class="fplace">' + F.esc(d.title || "") + "</span>" +
-        '<span class="fcount">' + F.plural(n, "cache") + "</span></a></li>";
+        '<span class="fcount">' + F.plural(d.stops.length, "cache") + "</span></a></li>";
     }
-    box.innerHTML = html + "</ul>";
+    daysBox.innerHTML = html + "</ul>";
   }
 
-  fetch("api/favorites", { cache: "no-store" })
-    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
-    .then(j => render(j.days || []))
-    .catch(() => { box.innerHTML = '<div class="empty">Couldn\'t load favourites. Is serve.py running?</div>'; });
+  Promise.all([
+    fetch("api/favorites", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
+    fetch("api/trips", { cache: "no-store" }).then(r => r.ok ? r.json() : { trips: [] })
+  ]).then(([fav, tr]) => {
+    renderTrips(fav.trips || [], tr.trips || []);
+    renderDays(fav.days || []);
+  }).catch(() => {
+    tripsBox.innerHTML = daysBox.innerHTML = '<div class="empty">Couldn\'t load favourites. Is serve.py running?</div>';
+  });
 })();
 </script>
 </body>

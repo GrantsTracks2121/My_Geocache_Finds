@@ -40,8 +40,8 @@
     <div class="figures" id="trip-figures">–</div>
   </a>
   <a class="section-card" href="favorites.html">
-    <h3>Favourite Days</h3>
-    <p>The days you've starred, newest first.</p>
+    <h3>Favourites</h3>
+    <p>The trips and days you've starred.</p>
     <div class="figures" id="fav-figures">–</div>
   </a>
 </div>
@@ -85,6 +85,7 @@
   const FIND_LOGS = new Set(["Found it", "Attended", "Webcam Photo Taken"]);
 
   let favoriteDays = [];
+  let favoriteTrips = [];
   let trips = null;
 
   function render() {
@@ -134,27 +135,34 @@
       if (resp.ok) trips = (await resp.json()).trips || [];
     } catch (err) { /* not served */ }
     renderTrips();
+    renderFavorites();
   }
 
-  // Favourite Days card: how many, and the newest one
+  // Favourites card: how many favourite trips and days
   function renderFavorites() {
     const el = document.getElementById("fav-figures");
     if (!served) { el.innerHTML = "&nbsp;"; return; }
-    const byDate = new Map((window.GEOCACHE_DAYS || []).map(d => [d.date, d]));
-    const days = favoriteDays.filter(d => byDate.has(d)).sort().reverse();
-    if (!days.length) {
-      el.innerHTML = '<span class="muted">None yet. Click the ☆ beside a day in Browse by Date.</span>';
+    const byDate = new Set((window.GEOCACHE_DAYS || []).map(d => d.date));
+    const days = favoriteDays.filter(d => byDate.has(d)).length;
+    const tripIds = new Set((trips || []).map(t => t.id));
+    const tripCount = favoriteTrips.filter(id => tripIds.has(id)).length;
+    if (!days && !tripCount) {
+      el.innerHTML = '<span class="muted">None yet. Click a ☆ beside a day or a trip.</span>';
       return;
     }
-    el.innerHTML = '<strong style="color:var(--gold)">★ ' + num(days.length) + "</strong> favourite day" +
-      (days.length === 1 ? "" : "s") + '<br><span class="muted">Newest: ' + prettyDate(days[0]) + "</span>";
+    el.innerHTML = '<span style="color:var(--gold)">★</span> <strong>' + tripCount + "</strong> trip" + (tripCount === 1 ? "" : "s") +
+      " · <strong>" + num(days) + "</strong> day" + (days === 1 ? "" : "s");
   }
 
   // ---------- favourites and settings from serve.py ----------
   async function loadFavorites() {
     try {
       const resp = await fetch("api/favorites", { cache: "no-store" });
-      if (resp.ok) favoriteDays = (await resp.json()).days || [];
+      if (resp.ok) {
+        const j = await resp.json();
+        favoriteDays = j.days || [];
+        favoriteTrips = j.trips || [];
+      }
     } catch (err) { /* not served */ }
     renderFavorites();
   }

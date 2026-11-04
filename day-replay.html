@@ -578,15 +578,16 @@
 
   // ---------- favourites (saved to favorites.json by serve.py) ----------
   const favorites = new Set();
+  const favTrips = new Set();     // favourite trip ids
   const starEl = document.getElementById("favStar");
   let favoritesReady = false;
 
   function updateStar() {
-    const on = favorites.has(currentDate);
+    const on = currentDate === "trip" ? !!trip && favTrips.has(trip.id) : favorites.has(currentDate);
     starEl.textContent = on ? "★" : "☆";
     starEl.classList.toggle("on", on);
     starEl.setAttribute("aria-pressed", String(on));
-    starEl.disabled = !favoritesReady || !currentDate || currentDate === "trip";
+    starEl.disabled = !favoritesReady || !currentDate;
     starEl.title = !favoritesReady
       ? "Favourites need the page opened with python3 serve.py"
       : on ? "Remove from favourites" : "Add to favourites";
@@ -596,7 +597,9 @@
     try {
       const resp = await fetch("api/favorites", { cache: "no-store" });
       if (!resp.ok) throw new Error(resp.status);
-      (await resp.json()).days.forEach(d => favorites.add(d));
+      const j = await resp.json();
+      (j.days || []).forEach(d => favorites.add(d));
+      (j.trips || []).forEach(id => favTrips.add(id));
       favoritesReady = true;
     } catch (err) {
       favoritesReady = false;
@@ -605,7 +608,27 @@
     updateStar();
   }
 
+  async function toggleTripFavorite() {
+    const id = trip.id;
+    const wasOn = favTrips.has(id);
+    if (wasOn) favTrips.delete(id); else favTrips.add(id);
+    updateStar();
+    try {
+      const resp = await fetch("api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ trips: [...favTrips] })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+    } catch (err) {
+      if (wasOn) favTrips.add(id); else favTrips.delete(id);
+      updateStar();
+      alert("Couldn't save the favourite. Is serve.py still running?");
+    }
+  }
+
   async function toggleFavorite() {
+    if (currentDate === "trip" && trip && favoritesReady) { toggleTripFavorite(); return; }
     if (!currentDate || currentDate === "trip" || !favoritesReady) return;
     const date = currentDate;
     const wasOn = favorites.has(date);
