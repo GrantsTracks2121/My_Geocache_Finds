@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Trips</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<nav class="site-nav">
+  <a href="index.html">Dashboard</a>
+  <a href="day-replay.html">Browse by Date</a>
+  <span class="later" title="Coming soon">Browse by Location</span>
+  <a href="trips.html" class="here">Trips</a>
+</nav>
+
+<h1>Trips</h1>
+<p class="subtitle">A trip is a name and a date range. Open one to see its caching days on the map.</p>
+<div id="file-notice" class="notice" hidden>
+  You opened this page as a file, so trips can't be loaded or saved.
+  In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
+  then open <a href="http://localhost:8002/trips.html">http://localhost:8002/trips.html</a>.
+</div>
+
+<h2 id="form-title">New trip</h2>
+<form class="panel trip-form" id="trip-form" autocomplete="off">
+  <div class="row">
+    <label class="grow">Name
+      <input type="text" id="t-name" maxlength="100" required>
+    </label>
+    <label>Start date
+      <input type="date" id="t-start" required>
+    </label>
+    <label>End date
+      <input type="date" id="t-end" required>
+    </label>
+  </div>
+  <div class="row">
+    <label class="grow">Note (optional)
+      <textarea id="t-note" maxlength="2000"></textarea>
+    </label>
+  </div>
+  <div class="actions">
+    <button class="btn" type="submit" id="t-save">Add trip</button>
+    <button class="btn secondary" type="button" id="t-cancel" hidden>Cancel</button>
+    <span class="preview" id="t-preview"></span>
+    <span class="error" id="t-error"></span>
+  </div>
+</form>
+
+<h2>Your trips</h2>
+<div id="trips"><div class="empty">Loading…</div></div>
+
+<script src="data/days.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  "use strict";
+  const F = window.Finds;
+  const DAYS = window.GEOCACHE_DAYS || [];
+  const served = location.protocol.startsWith("http");
+  if (!served) document.getElementById("file-notice").hidden = false;
+
+  const form = document.getElementById("trip-form");
+  const nameEl = document.getElementById("t-name");
+  const startEl = document.getElementById("t-start");
+  const endEl = document.getElementById("t-end");
+  const noteEl = document.getElementById("t-note");
+  const saveEl = document.getElementById("t-save");
+  const cancelEl = document.getElementById("t-cancel");
+  const previewEl = document.getElementById("t-preview");
+  const errorEl = document.getElementById("t-error");
+  const listEl = document.getElementById("trips");
+
+  let trips = [];
+  let editingId = null;
+
+  function summary(trip) {
+    const days = F.tripDays(trip, DAYS);
+    const stops = days.flatMap(d => d.stops);
+    return { days, stops, where: F.regionsText(stops) };
+  }
+
+  function render() {
+    if (!served) {
+      listEl.innerHTML = '<div class="empty">Trips show here when the page is opened through serve.py.</div>';
+      return;
+    }
+    if (!trips.length) {
+      listEl.innerHTML = '<div class="empty">No trips yet. Add your first one above.</div>';
+      return;
+    }
+    listEl.innerHTML = '<ul class="trip-list">' + trips.map(t => {
+      const s = summary(t);
+      const span = F.daySpan(t.start, t.end);
+      return '<li data-id="' + F.esc(t.id) + '"' + (t.id === editingId ? ' class="editing"' : "") + ">" +
+        '<div class="tinfo" data-open="' + F.esc(t.id) + '">' +
+          '<a class="tname" href="day-replay.html?trip=' + encodeURIComponent(t.id) + '">' + F.esc(t.name) + "</a>" +
+          '<div class="tdates">' + F.dateRange(t.start, t.end) + ' <span class="muted">(' + F.plural(span, "day") + ")</span></div>" +
+          '<div class="tstats">' + (s.days.length
+            ? F.plural(s.days.length, "caching day") + " · " + F.plural(s.stops.length, "cache") + (s.where ? " · " + F.esc(s.where) : "")
+            : "No caching days in this range") + "</div>" +
+          (t.note ? '<div class="tnote">' + F.esc(t.note) + "</div>" : "") +
+        "</div>" +
+        '<div class="tbtns">' +
+          '<button class="btn secondary small" type="button" data-edit="' + F.esc(t.id) + '">Edit</button>' +
+          '<button class="btn danger small" type="button" data-delete="' + F.esc(t.id) + '">Delete</button>' +
+        "</div></li>";
+    }).join("") + "</ul>";
+  }
+
+  // Clicking anywhere on a trip's details opens it
+  listEl.addEventListener("click", e => {
+    const edit = e.target.closest("[data-edit]");
+    const del = e.target.closest("[data-delete]");
+    const open = e.target.closest("[data-open]");
+    if (edit) startEdit(edit.dataset.edit);
+    else if (del) deleteTrip(del.dataset.delete);
+    else if (open && !e.target.closest("a")) location.href = "day-replay.html?trip=" + encodeURIComponent(open.dataset.open);
+  });
+
+  // Live count of what the chosen dates contain
+  function updatePreview() {
+    errorEl.textContent = "";
+    const start = startEl.value, end = endEl.value;
+    if (!start || !end) { previewEl.textContent = ""; return; }
+    if (start > end) { previewEl.textContent = ""; errorEl.textContent = "The end date is before the start date."; return; }
+    const s = summary({ start, end });
+    previewEl.textContent = s.days.length
+      ? "This range has " + F.plural(s.days.length, "caching day") + " and " + F.plural(s.stops.length, "cache") + (s.where ? " (" + s.where + ")" : "") + "."
+      : "No caching days in this range yet.";
+  }
+  startEl.addEventListener("change", () => {
+    if (startEl.value && (!endEl.value || endEl.value < startEl.value)) endEl.value = startEl.value;
+    updatePreview();
+  });
+  endEl.addEventListener("change", updatePreview);
+
+  function resetForm() {
+    editingId = null;
+    form.reset();
+    document.getElementById("form-title").textContent = "New trip";
+    saveEl.textContent = "Add trip";
+    cancelEl.hidden = true;
+    previewEl.textContent = errorEl.textContent = "";
+    render();
+  }
+  cancelEl.addEventListener("click", resetForm);
+
+  function startEdit(id) {
+    const t = trips.find(x => x.id === id);
+    if (!t) return;
+    editingId = id;
+    nameEl.value = t.name;
+    startEl.value = t.start;
+    endEl.value = t.end;
+    noteEl.value = t.note || "";
+    document.getElementById("form-title").textContent = "Edit trip";
+    saveEl.textContent = "Save changes";
+    cancelEl.hidden = false;
+    updatePreview();
+    render();
+    form.scrollIntoView({ behavior: "smooth", block: "start" });
+    nameEl.focus();
+  }
+
+  async function save(list) {
+    const resp = await fetch("api/trips", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ trips: list })
+    });
+    if (!resp.ok) throw new Error(resp.status);
+    trips = (await resp.json()).trips;
+  }
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    errorEl.textContent = "";
+    const trip = {
+      id: editingId || "trip-" + Date.now().toString(36),
+      name: nameEl.value.trim(),
+      start: startEl.value,
+      end: endEl.value,
+      note: noteEl.value.trim()
+    };
+    if (!trip.name) { errorEl.textContent = "Please give the trip a name."; return; }
+    if (!trip.start || !trip.end) { errorEl.textContent = "Please choose a start and end date."; return; }
+    if (trip.start > trip.end) { errorEl.textContent = "The end date is before the start date."; return; }
+    const list = editingId ? trips.map(t => t.id === editingId ? trip : t) : [...trips, trip];
+    try {
+      await save(list);
+      resetForm();
+    } catch (err) {
+      errorEl.textContent = "Couldn't save the trip. Is serve.py running?";
+    }
+  });
+
+  async function deleteTrip(id) {
+    const t = trips.find(x => x.id === id);
+    if (!t || !confirm('Delete the trip "' + t.name + '"? Your caching days aren\'t affected.')) return;
+    try {
+      await save(trips.filter(x => x.id !== id));
+      if (editingId === id) resetForm(); else render();
+    } catch (err) {
+      alert("Couldn't delete the trip. Is serve.py running?");
+    }
+  }
+
+  async function load() {
+    if (!served) { render(); return; }
+    try {
+      const resp = await fetch("api/trips", { cache: "no-store" });
+      if (!resp.ok) throw new Error(resp.status);
+      trips = (await resp.json()).trips || [];
+    } catch (err) {
+      listEl.innerHTML = '<div class="empty">Couldn\'t load trips. Is serve.py running?</div>';
+      return;
+    }
+    render();
+  }
+  load();
+})();
+</script>
+</body>
+</html>

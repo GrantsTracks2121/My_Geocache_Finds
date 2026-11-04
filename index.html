@@ -11,6 +11,7 @@
   <a href="index.html" class="here">Dashboard</a>
   <a href="day-replay.html">Browse by Date</a>
   <span class="later" title="Coming soon">Browse by Location</span>
+  <a href="trips.html">Trips</a>
 </nav>
 
 <h1>My Geocache Finds</h1>
@@ -32,11 +33,11 @@
     <p>Your finds by country, province and state.</p>
     <div class="figures" id="place-figures">–</div>
   </div>
-  <div class="section-card later">
-    <h3>Trips <span class="soon">Coming soon</span></h3>
-    <p>Group caching days into a named trip.</p>
-    <div class="figures">&nbsp;</div>
-  </div>
+  <a class="section-card" href="trips.html">
+    <h3>Trips</h3>
+    <p>Name a date range and see its caching days together.</p>
+    <div class="figures" id="trip-figures">–</div>
+  </a>
 </div>
 
 <h2>Favourite days</h2>
@@ -81,6 +82,7 @@
   const FIND_LOGS = new Set(["Found it", "Attended", "Webcam Photo Taken"]);
 
   let favoriteDays = [];
+  let trips = null;
 
   function render() {
     const DAYS = window.GEOCACHE_DAYS || [];
@@ -110,6 +112,25 @@
       "<strong>" + countries.size + "</strong> countries · <strong>" + regions.size + "</strong> provinces &amp; states";
 
     renderFavorites();
+    renderTrips();
+  }
+
+  function renderTrips() {
+    const el = document.getElementById("trip-figures");
+    if (!served || trips === null) { el.innerHTML = "&nbsp;"; return; }
+    if (!trips.length) { el.innerHTML = '<span class="muted">No trips yet. Add one on the Trips page.</span>'; return; }
+    const DAYS = window.GEOCACHE_DAYS || [];
+    const tripDays = new Set(trips.flatMap(t => DAYS.filter(d => d.date >= t.start && d.date <= t.end).map(d => d.date)));
+    el.innerHTML = "<strong>" + trips.length + "</strong> trip" + (trips.length === 1 ? "" : "s") +
+      " · <strong>" + num(tripDays.size) + "</strong> caching days";
+  }
+
+  async function loadTrips() {
+    try {
+      const resp = await fetch("api/trips", { cache: "no-store" });
+      if (resp.ok) trips = (await resp.json()).trips || [];
+    } catch (err) { /* not served */ }
+    renderTrips();
   }
 
   function renderFavorites() {
@@ -241,6 +262,7 @@
   render();
   loadFavorites();
   loadSettings();
+  loadTrips();
 })();
 </script>
 </body>

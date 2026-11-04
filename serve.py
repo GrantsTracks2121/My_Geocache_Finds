@@ -5,6 +5,7 @@ My Geocache Finds - local web server.
 Shows the pages in this folder (like `python3 -m http.server`) and also:
   - saves your favourite days to favorites.json
   - saves site-wide settings to settings.json
+  - saves your trips (a name and a date range) to trips.json
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
     folder and rebuilds data/days.js with build_days.py
 
@@ -71,6 +72,37 @@ def read_favorites():
         data = {}
     data.setdefault("days", [])
     return data
+
+
+TRIPS_PATH = HERE / "trips.json"
+TRIP_ID_RE = re.compile(r"^[a-z0-9-]{1,40}$")
+
+
+def read_trips():
+    try:
+        data = json.loads(TRIPS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        data = {}
+    data.setdefault("trips", [])
+    return data
+
+
+def clean_trip(t):
+    """A trip from the page, checked: id, name, start, end (YYYY-MM-DD), note."""
+    if not isinstance(t, dict):
+        raise ValueError("bad trip")
+    trip = {
+        "id": str(t.get("id", "")),
+        "name": str(t.get("name", "")).strip()[:100],
+        "start": str(t.get("start", "")),
+        "end": str(t.get("end", "")),
+        "note": str(t.get("note", "")).strip()[:2000],
+    }
+    if not (TRIP_ID_RE.match(trip["id"]) and trip["name"]
+            and DATE_RE.match(trip["start"]) and DATE_RE.match(trip["end"])
+            and trip["start"] <= trip["end"]):
+        raise ValueError("bad trip")
+    return trip
 
 
 def count_logs(days_js):
@@ -176,6 +208,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, read_favorites())
         elif path == "/api/settings":
             self.send_json(200, read_settings())
+        elif path == "/api/trips":
+            self.send_json(200, read_trips())
         else:
             super().do_GET()
 
@@ -191,8 +225,24 @@ class Handler(SimpleHTTPRequestHandler):
             self.post_favorites()
         elif path == "/api/upload/finds":
             self.post_finds()
+        elif path == "/api/trips":
+            self.post_trips()
         else:
             self.send_json(404, {"error": "not found"})
+
+    def post_trips(self):
+        """Replace the list of trips with the one the page sends."""
+        try:
+            incoming = self.read_body().get("trips", [])
+            trips = [clean_trip(t) for t in incoming]
+            if len({t["id"] for t in trips}) != len(trips):
+                raise ValueError("duplicate trip id")
+        except (ValueError, AttributeError):
+            self.send_json(400, {"error": "bad trips data"})
+            return
+        trips.sort(key=lambda t: (t["start"], t["end"]), reverse=True)
+        write_json(TRIPS_PATH, {"trips": trips})
+        self.send_json(200, {"trips": trips})
 
     def post_settings(self):
         try:

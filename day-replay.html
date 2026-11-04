@@ -44,6 +44,12 @@
   #sidebar .back { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent);
     text-decoration: none; margin-bottom: 6px; }
   #sidebar .back:hover { text-decoration: underline; }
+  #tripHead { margin: -4px 0 10px; }
+  #tripHead .trip-name { font-weight: 600; font-size: 15px; }
+  #tripHead .trip-dates { color: var(--muted); font-size: 12px; }
+  #days li.whole .date { color: var(--accent); }
+  .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px;
+    vertical-align: 0; border: 1px solid rgba(0,0,0,.25); }
   #sidebar .filters { display: flex; gap: 8px; }
   #sidebar select {
     font: inherit;
@@ -188,8 +194,12 @@
 
 <aside id="sidebar">
   <header>
-    <a class="back" href="index.html">← Dashboard</a>
+    <a class="back" id="backLink" href="index.html">← Dashboard</a>
     <h1>Geocaching Days Replay</h1>
+    <div id="tripHead" hidden>
+      <div class="trip-name"></div>
+      <div class="trip-dates"></div>
+    </div>
     <div class="filters">
       <select id="yearFilter" aria-label="Year"></select>
       <select id="monthFilter" aria-label="Month"></select>
@@ -228,6 +238,7 @@
 <script src="lib/marked.min.js"></script>
 <script src="lib/purify.min.js"></script>
 <script src="data/days.js"></script>
+<script src="common.js"></script>
 <script>
 (function () {
   "use strict";
@@ -375,15 +386,37 @@
     monthEl.value = counts[keep] ? keep : "";
   }
 
+  // ---------- trips (day-replay.html?trip=ID, from the Trips page) ----------
+  // A trip narrows the list to the caching days in its date range, with a
+  // "Whole trip" entry that shows every day on one map, each in its own colour.
+  let trip = null;
+  let tripDayList = [];
+  const TRIP_COLORS = ["#e07b24", "#7b3fa0", "#1f78b4", "#d6336c", "#2a9d8f", "#b8860b",
+    "#5a5ad6", "#c0392b", "#3a7d44", "#8d5524"];
+  function tripColor(date) {
+    const oldestFirst = tripDayList.map(d => d.date).reverse();
+    return TRIP_COLORS[Math.max(0, oldestFirst.indexOf(date)) % TRIP_COLORS.length];
+  }
+
   function renderList() {
-    const prefix = yearEl.value ? yearEl.value + (monthEl.value ? "-" + monthEl.value : "") : "";
-    const shown = DAYS.filter(d => d.date.startsWith(prefix));
+    let shown;
+    if (trip) {
+      shown = tripDayList;
+    } else {
+      const prefix = yearEl.value ? yearEl.value + (monthEl.value ? "-" + monthEl.value : "") : "";
+      shown = DAYS.filter(d => d.date.startsWith(prefix));
+    }
     const stopCount = shown.reduce((n, d) => n + d.stops.length, 0);
     summaryEl.textContent = shown.length + " caching days, " + stopCount + " stops";
-    listEl.innerHTML = shown.map(d => {
+    const whole = trip
+      ? '<li class="whole" data-date="trip"><div class="date">Whole trip</div>' +
+        '<div class="meta">All ' + Finds.plural(shown.length, "caching day") + " on one map</div></li>"
+      : "";
+    listEl.innerHTML = whole + shown.map(d => {
       const n = d.stops.length;
       return '<li data-date="' + d.date + '">' +
-        '<div class="date">' + prettyDate(d.date) +
+        '<div class="date">' + (trip ? '<span class="swatch" style="background:' + tripColor(d.date) + '"></span>' : "") +
+          prettyDate(d.date) +
           (favorites.has(d.date) ? '<span class="fav" title="Favourite">★</span>' : "") + "</div>" +
         '<div class="meta">' + escapeHtml(autoTitle(d)) + " · " + n + (n === 1 ? " stop" : " stops") + "</div>" +
         "</li>";
@@ -422,7 +455,7 @@
     starEl.textContent = on ? "★" : "☆";
     starEl.classList.toggle("on", on);
     starEl.setAttribute("aria-pressed", String(on));
-    starEl.disabled = !favoritesReady || !currentDate;
+    starEl.disabled = !favoritesReady || !currentDate || currentDate === "trip";
     starEl.title = !favoritesReady
       ? "Favourites need the page opened with python3 serve.py"
       : on ? "Remove from favourites" : "Add to favourites";
@@ -442,7 +475,7 @@
   }
 
   async function toggleFavorite() {
-    if (!currentDate || !favoritesReady) return;
+    if (!currentDate || currentDate === "trip" || !favoritesReady) return;
     const date = currentDate;
     const wasOn = favorites.has(date);
     if (wasOn) favorites.delete(date); else favorites.add(date);
@@ -488,10 +521,13 @@
     currentDate = date;
     markActive();
     updateStar();
-    if (sequenceMode === "manual") showAll(); else play();
+    if (date === "trip") showTrip();
+    else if (sequenceMode === "manual") showAll();
+    else play();
   }
 
-  document.getElementById("play").addEventListener("click", () => { if (currentDate) play(); });
+  const playEl = document.getElementById("play");
+  playEl.addEventListener("click", () => { if (currentDate && currentDate !== "trip") play(); });
 
   function cacheCount(n) { return n + (n === 1 ? " cache" : " caches"); }
 
@@ -502,6 +538,8 @@
     if (!day) return null;
     dayLayer.clearLayers();
     closePanel();
+    showTripLegend(false);
+    playEl.disabled = false;
     titleEl.textContent = prettyDate(day.date) + " — " + autoTitle(day);
     const points = day.stops.map(s => [s.lat, s.lon]);
     if (points.length === 1) {
@@ -520,22 +558,64 @@
     progressEl.textContent = cacheCount(day.stops.length);
   }
 
-  function addPin(stop, index) {
+  // Whole trip: every caching day's caches and route, each day in its colour
+  function showTrip() {
+    runToken++;
+    dayLayer.clearLayers();
+    closePanel();
+    playEl.disabled = true;
+    titleEl.textContent = trip.name + " — " + Finds.dateRange(trip.start, trip.end);
+    const stops = tripDayList.flatMap(d => d.stops);
+    progressEl.textContent = tripDayList.length
+      ? Finds.plural(tripDayList.length, "caching day") + " · " + cacheCount(stops.length)
+      : "No caching days in this trip";
+    if (!stops.length) { showTripLegend(false); return; }
+    const oldestFirst = [...tripDayList].reverse();
+    oldestFirst.forEach((day, k) => {
+      const color = tripColor(day.date);
+      L.polyline(day.stops.map(s => [s.lat, s.lon]), { color: color, weight: 3, opacity: 0.85 }).addTo(dayLayer);
+      day.stops.forEach((s, i) => addPin(s, i, {
+        day: day, color: color, label: "Day " + (k + 1) + " · " + prettyDate(day.date).slice(0, -5) + " · "
+      }));
+    });
+    const points = stops.map(s => [s.lat, s.lon]);
+    if (points.length === 1) map.setView(points[0], 15);
+    else map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+    showTripLegend(true);
+  }
+
+  const tripLegend = L.control({ position: "topright" });
+  tripLegend.onAdd = function () {
+    const div = L.DomUtil.create("div", "legend");
+    div.innerHTML = [...tripDayList].reverse().map((d, k) =>
+      '<div><i style="background:' + tripColor(d.date) + '"></i>Day ' + (k + 1) + " · " +
+      prettyDate(d.date).slice(0, -5) + "</div>").join("");
+    return div;
+  };
+  let tripLegendShown = false;
+  function showTripLegend(on) {
+    if (on && !tripLegendShown) tripLegend.addTo(map);
+    if (!on && tripLegendShown) tripLegend.remove();
+    tripLegendShown = on;
+  }
+
+  function addPin(stop, index, opts = {}) {
     const src = typeIcon(stop.type);
     const inner = src
       ? '<img src="' + src + '" alt="">'
       : '<div class="no-icon">?</div>';
     const icon = L.divIcon({
       className: "",
-      html: '<div class="stop-box" style="background:' + stopColor(stop) + '">' + inner + "</div>",
+      html: '<div class="stop-box" style="background:' + stopColor(stop) +
+        (opts.color ? ";border:3px solid " + opts.color : "") + '">' + inner + "</div>",
       iconSize: [36, 36],
       iconAnchor: [18, 18],
       popupAnchor: [0, -18],
       tooltipAnchor: [0, -18]
     });
     const marker = L.marker([stop.lat, stop.lon], { icon: icon, zIndexOffset: index }).addTo(dayLayer);
-    marker.bindTooltip((index + 1) + ". " + escapeHtml(stop.name), { direction: "top" });
-    marker.on("click", () => openPanel(stop, index));
+    marker.bindTooltip((opts.label || "") + (index + 1) + ". " + escapeHtml(stop.name), { direction: "top" });
+    marker.on("click", () => openPanel(stop, index, opts.day));
     return marker;
   }
 
@@ -543,8 +623,8 @@
   const panelEl = document.getElementById("panel");
   const panelBody = document.getElementById("panelBody");
 
-  function openPanel(stop, index) {
-    const day = DAYS.find(d => d.date === currentDate);
+  function openPanel(stop, index, day) {
+    day = day || DAYS.find(d => d.date === currentDate);
     const place = stop.town
       ? (stop.near ? "near " : "") + stop.town + (stop.area ? " (" + stop.area + ")" : "")
       : "";
@@ -665,13 +745,46 @@
   }
   // Open on the day named in the address (day-replay.html?date=2026-10-14,
   // used by the Dashboard's favourites), or else the most recent day.
-  const asked = new URLSearchParams(location.search).get("date");
+  const params = new URLSearchParams(location.search);
+  const asked = params.get("date");
   const startDate = DAYS.some(d => d.date === asked) ? asked : DAYS[0].date;
   yearEl.value = startDate.slice(0, 4);
   fillMonths(startDate.slice(5, 7));
-  renderList();
-  loadFavorites();
-  loadSettings().then(() => selectDay(startDate));
+
+  // A trip from the Trips page (day-replay.html?trip=ID)
+  async function loadTrip(id) {
+    try {
+      const resp = await fetch("api/trips", { cache: "no-store" });
+      if (!resp.ok) return null;
+      return ((await resp.json()).trips || []).find(t => t.id === id) || null;
+    } catch (err) {
+      return null;
+    }
+  }
+
+  async function start() {
+    const tripId = params.get("trip");
+    if (tripId) {
+      trip = await loadTrip(tripId);
+      if (trip) {
+        tripDayList = Finds.tripDays(trip, DAYS);
+        document.querySelector("#sidebar .filters").style.display = "none";
+        const head = document.getElementById("tripHead");
+        head.hidden = false;
+        head.querySelector(".trip-name").textContent = trip.name;
+        head.querySelector(".trip-dates").textContent = Finds.dateRange(trip.start, trip.end);
+        const back = document.getElementById("backLink");
+        back.href = "trips.html";
+        back.textContent = "← Trips";
+        document.title = trip.name + " – Geocaching Days Replay";
+      }
+    }
+    renderList();
+    loadFavorites();
+    await loadSettings();
+    selectDay(trip ? (asked && tripDayList.some(d => d.date === asked) ? asked : "trip") : startDate);
+  }
+  start();
 })();
 </script>
 </body>
