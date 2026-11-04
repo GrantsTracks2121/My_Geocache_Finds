@@ -122,6 +122,7 @@
     <h1>Geocache Day Replay</h1>
     <div class="filters">
       <select id="yearFilter" aria-label="Year"></select>
+      <select id="monthFilter" aria-label="Month"></select>
     </div>
     <div id="summary"></div>
   </header>
@@ -261,13 +262,41 @@
   const yearEl = document.getElementById("yearFilter");
   const summaryEl = document.getElementById("summary");
 
+  const monthEl = document.getElementById("monthFilter");
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December"];
+
   const years = [...new Set(DAYS.map(d => d.date.slice(0, 4)))];
   yearEl.innerHTML = '<option value="">All years</option>' +
     years.map(y => '<option value="' + y + '">' + y + "</option>").join("");
 
-  function renderList() {
+  // Month list for the chosen year: only months with caching days, newest
+  // first, each with its day count. Keeps the given month if that year has it.
+  function fillMonths(keep) {
     const year = yearEl.value;
-    const shown = DAYS.filter(d => !year || d.date.startsWith(year));
+    if (!year) {
+      monthEl.innerHTML = '<option value="">All months</option>';
+      monthEl.disabled = true;
+      return;
+    }
+    const counts = {};
+    for (const d of DAYS) {
+      if (d.date.startsWith(year)) {
+        const m = d.date.slice(5, 7);
+        counts[m] = (counts[m] || 0) + 1;
+      }
+    }
+    const months = Object.keys(counts).sort().reverse();
+    monthEl.innerHTML = '<option value="">All months</option>' + months.map(m =>
+      '<option value="' + m + '">' + MONTH_NAMES[Number(m) - 1] + " (" + counts[m] +
+      (counts[m] === 1 ? " day" : " days") + ")</option>").join("");
+    monthEl.disabled = false;
+    monthEl.value = counts[keep] ? keep : "";
+  }
+
+  function renderList() {
+    const prefix = yearEl.value ? yearEl.value + (monthEl.value ? "-" + monthEl.value : "") : "";
+    const shown = DAYS.filter(d => d.date.startsWith(prefix));
     const stopCount = shown.reduce((n, d) => n + d.stops.length, 0);
     summaryEl.textContent = shown.length + " caching days, " + stopCount + " stops";
     listEl.innerHTML = shown.map(d => {
@@ -284,7 +313,8 @@
     const li = e.target.closest("li[data-date]");
     if (li) selectDay(li.dataset.date);
   });
-  yearEl.addEventListener("change", renderList);
+  yearEl.addEventListener("change", () => { fillMonths(monthEl.value); renderList(); });
+  monthEl.addEventListener("change", renderList);
 
   // Up/down arrow keys move between days
   document.addEventListener("keydown", e => {
@@ -407,6 +437,9 @@
     titleEl.textContent = "No data found. Run build_days.py first.";
     return;
   }
+  // Open on the most recent year and month with caching days
+  yearEl.value = DAYS[0].date.slice(0, 4);
+  fillMonths(DAYS[0].date.slice(5, 7));
   renderList();
   selectDay(DAYS[0].date);
 })();
