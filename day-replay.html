@@ -438,6 +438,8 @@
   // "Whole trip" entry that shows every day on one map, each in its own colour.
   let trip = null;
   let tripDayList = [];
+  // A place and month from Browse by Location narrows the list the same way
+  let place = null;
   const TRIP_COLORS = ["#e07b24", "#7b3fa0", "#1f78b4", "#d6336c", "#2a9d8f", "#b8860b",
     "#5a5ad6", "#c0392b", "#3a7d44", "#8d5524"];
   function tripColor(date) {
@@ -447,7 +449,7 @@
 
   function renderList() {
     let shown;
-    if (trip) {
+    if (trip || place) {
       shown = tripDayList;
     } else {
       const prefix = yearEl.value ? yearEl.value + (monthEl.value ? "-" + monthEl.value : "") : "";
@@ -520,7 +522,7 @@
     const date = li.dataset.date;
     if (date !== "trip" && e.shiftKey && anchor && anchor !== "trip") {
       const [a, b] = [anchor, date].sort();
-      DAYS.forEach(d => { if (d.date >= a && d.date <= b && (!trip || tripDayList.includes(d))) picked.add(d.date); });
+      DAYS.forEach(d => { if (d.date >= a && d.date <= b && (!(trip || place) || tripDayList.includes(d))) picked.add(d.date); });
       renderPicked();
     } else if (date !== "trip" && e.metaKey) {
       if (picked.has(date)) picked.delete(date); else picked.add(date);
@@ -917,27 +919,49 @@
     }
   }
 
+  // Narrow the list (used by trips and by places): header, back link, no filters
+  function narrowTo(name, dates, backHref, backText) {
+    document.querySelector("#sidebar .filters").style.display = "none";
+    const head = document.getElementById("tripHead");
+    head.hidden = false;
+    head.querySelector(".trip-name").textContent = name;
+    head.querySelector(".trip-dates").textContent = dates;
+    const back = document.getElementById("backLink");
+    back.href = backHref;
+    back.textContent = backText;
+    document.title = name + " – Geocaching Days Replay";
+  }
+
   async function start() {
+    const month = params.get("month");
+    if (month && /^\d{4}-\d{2}$/.test(month) && params.get("country")) {
+      place = {};
+      for (const l of Finds.PLACE_LEVELS) if (params.get(l)) place[l] = params.get(l);
+      tripDayList = DAYS.filter(d => d.date.startsWith(month) && d.stops.some(s => Finds.inPlace(s, place)));
+      if (tripDayList.length) {
+        const back = new URLSearchParams(place);
+        back.set("year", month.slice(0, 4));
+        const monthName = new Date(Date.UTC(+month.slice(0, 4), +month.slice(5) - 1, 1))
+          .toLocaleString("en-CA", { month: "long", year: "numeric", timeZone: "UTC" });
+        narrowTo(place.town || place.state || place.country, monthName + " · " + Finds.plural(tripDayList.length, "caching day"),
+          "location.html?" + back.toString(), "← Browse by Location");
+      } else {
+        place = null;
+      }
+    }
     const tripId = params.get("trip");
     if (tripId) {
       trip = await loadTrip(tripId);
       if (trip) {
         tripDayList = Finds.tripDays(trip, DAYS);
-        document.querySelector("#sidebar .filters").style.display = "none";
-        const head = document.getElementById("tripHead");
-        head.hidden = false;
-        head.querySelector(".trip-name").textContent = trip.name;
-        head.querySelector(".trip-dates").textContent = Finds.dateRange(trip.start, trip.end);
-        const back = document.getElementById("backLink");
-        back.href = "trips.html";
-        back.textContent = "← Trips";
-        document.title = trip.name + " – Geocaching Days Replay";
+        narrowTo(trip.name, Finds.dateRange(trip.start, trip.end), "trips.html", "← Trips");
       }
     }
     renderList();
     loadFavorites();
     await loadSettings();
-    const first = trip ? (asked && tripDayList.some(d => d.date === asked) ? asked : "trip") : startDate;
+    const first = trip ? (asked && tripDayList.some(d => d.date === asked) ? asked : "trip")
+      : place ? tripDayList[0].date : startDate;
     selectOnly(first);
     selectDay(first);
   }

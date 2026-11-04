@@ -54,7 +54,20 @@ window.Finds = (function () {
     return days.filter(d => d.date >= trip.start && d.date <= trip.end);
   }
 
+  // Place levels for Browse by Location: country > province/state > town.
+  // "near Wabamun" counts as Wabamun.
+  const PLACE_LEVELS = ["country", "state", "town"];
+  function placeValue(stop, level) {
+    if (level === "country") return stop.country || "Unknown country";
+    if (level === "state") return stop.state && stop.state !== "None" ? stop.state : "Other";
+    return stop.town || "Unnamed area";
+  }
+  function inPlace(stop, place) {
+    return PLACE_LEVELS.every(l => !place[l] || placeValue(stop, l) === place[l]);
+  }
+
   function plural(n, word) { return n.toLocaleString("en-CA") + " " + word + (n === 1 ? "" : "s"); }
 
-  return { MONTHS, WEEKDAYS, esc, prettyDate, dateRange, daySpan, region, regionsText, tripDays, plural };
+  return { MONTHS, WEEKDAYS, esc, prettyDate, dateRange, daySpan, region, regionsText, tripDays, plural,
+    PLACE_LEVELS, placeValue, inPlace };
 })();

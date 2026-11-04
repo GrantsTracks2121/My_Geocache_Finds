@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Browse by Location</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="lib/leaflet.css">
+<style>
+  :root {
+    --bg: #f6f5f1; --panel: #fff; --ink: #22262a; --muted: #6b7178; --line: #e2e0da;
+    --accent: #2f6f4f; --cal: #c0392b;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body { font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif;
+    color: var(--ink); background: var(--bg); display: flex; }
+
+  /* Sidebar */
+  #sidebar { width: 300px; flex: none; display: flex; flex-direction: column;
+    background: var(--panel); border-right: 1px solid var(--line); }
+  #sidebar header { padding: 16px 16px 12px; border-bottom: 1px solid var(--line); }
+  #sidebar .back { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent);
+    text-decoration: none; margin-bottom: 6px; }
+  #sidebar .back:hover { text-decoration: underline; }
+  #sidebar h1 { font-size: 17px; margin: 0 0 8px; }
+  #crumbs { font-size: 13px; line-height: 1.6; }
+  #crumbs a { color: var(--accent); text-decoration: none; font-weight: 600; cursor: pointer; }
+  #crumbs a:hover { text-decoration: underline; }
+  #crumbs .sep { color: var(--muted); margin: 0 4px; }
+  #crumbs .here { font-weight: 600; }
+  #search { width: 100%; margin-top: 10px; font: inherit; padding: 6px 9px;
+    border: 1px solid var(--line); border-radius: 6px; }
+  #listHead { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  #places { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
+  #places li { padding: 9px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
+  #places li:hover { background: #f3f6f4; }
+  #places .name { font-weight: 600; }
+  #places .meta { color: var(--muted); font-size: 12px; }
+  #places .go { float: right; color: var(--muted); }
+  #places .none { padding: 16px; color: var(--muted); font-style: italic; cursor: default; }
+  #places .none:hover { background: none; }
+
+  /* Main */
+  #main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  #bar { display: flex; align-items: center; gap: 12px; padding: 10px 16px;
+    background: var(--panel); border-bottom: 1px solid var(--line); }
+  #placeTitle { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #placeStats { color: var(--muted); white-space: nowrap; }
+  #bar label { margin-left: auto; color: var(--muted); white-space: nowrap; }
+  #bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  #map { flex: 1; }
+  .legend { background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: 12px;
+    line-height: 1.5; box-shadow: 0 1px 4px rgba(0,0,0,.2); max-width: 240px; }
+
+  /* Calendar markers */
+  .cal { width: 58px; background: #fff; border: 1px solid rgba(0,0,0,.35); border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.35); text-align: center; overflow: hidden; cursor: pointer;
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
+  .cal .top { background: var(--cal); color: #fff; font: 700 11px/1 sans-serif; padding: 4px 2px 3px;
+    letter-spacing: .03em; }
+  .cal .num { font: 700 17px/1.1 sans-serif; padding-top: 3px; color: var(--ink); }
+  .cal .lbl { font-size: 10px; color: var(--muted); padding-bottom: 3px; }
+  .cal.year .top { background: var(--accent); font-size: 13px; padding: 5px 2px 4px; }
+  .cal:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,.4); }
+</style>
+</head>
+<body>
+
+<aside id="sidebar">
+  <header>
+    <a class="back" href="index.html">← Dashboard</a>
+    <h1>Browse by Location</h1>
+    <div id="crumbs"></div>
+    <input id="search" type="search" placeholder="Find a place…" aria-label="Find a place">
+    <div id="listHead"></div>
+  </header>
+  <ul id="places"></ul>
+</aside>
+
+<section id="main">
+  <div id="bar">
+    <div id="placeTitle">All places</div>
+    <span id="placeStats"></span>
+    <label>Year
+      <select id="year"></select>
+    </label>
+  </div>
+  <div id="map"></div>
+</section>
+
+<script src="lib/leaflet.js"></script>
+<script src="data/days.js"></script>
+<script src="common.js"></script>
+<script>
+(function () {
+  "use strict";
+  const F = window.Finds;
+  const DAYS = window.GEOCACHE_DAYS || [];
+  const MONTH_NAMES = ["January", "February", "March", "April", "May", "June", "July",
+    "August", "September", "October", "November", "December"];
+
+  // Every log with its caching day, flattened
+  const LOGS = [];
+  for (const d of DAYS) for (const s of d.stops) LOGS.push({ date: d.date, s });
+
+  // The place levels: country > province/state > town ("near Wabamun" counts as Wabamun)
+  const LEVELS = F.PLACE_LEVELS;
+  const LEVEL_NAMES = { country: ["country", "countries"], state: ["province or state", "provinces & states"],
+    town: ["town", "towns"] };
+  const valueAt = F.placeValue;
+
+  // ---------- where we are: ?country=..&state=..&town=..&year=.. ----------
+  let sel = {};
+  function readAddress() {
+    const q = new URLSearchParams(location.search);
+    sel = {};
+    for (const k of [...LEVELS, "year"]) if (q.get(k)) sel[k] = q.get(k);
+  }
+  function address(s) {
+    const q = new URLSearchParams();
+    for (const k of [...LEVELS, "year"]) if (s[k]) q.set(k, s[k]);
+    const qs = q.toString();
+    return location.pathname + (qs ? "?" + qs : "");
+  }
+  function go(next) {
+    sel = next;
+    history.pushState(null, "", address(sel));
+    searchEl.value = "";
+    render(true);
+  }
+  window.addEventListener("popstate", () => { readAddress(); render(true); });
+
+  function placeLogs(place) { return LOGS.filter(x => F.inPlace(x.s, place)); }
+  function nextLevel(place) { return LEVELS.find(l => !place[l]) || null; }
+  function placeName(place) {
+    return place.town || place.state || place.country || "All places";
+  }
+
+  function stats(logs) {
+    const days = new Set(logs.map(x => x.date));
+    const years = logs.map(x => x.date.slice(0, 4)).sort();
+    return { caches: logs.length, days: days.size, first: years[0], last: years[years.length - 1] };
+  }
+  function statsText(st) {
+    if (!st.caches) return "No caches";
+    return F.plural(st.caches, "cache") + " · " + F.plural(st.days, "day") + " · " +
+      (st.first === st.last ? st.first : st.first + "–" + st.last);
+  }
+
+  // ---------- sidebar ----------
+  const crumbsEl = document.getElementById("crumbs");
+  const listEl = document.getElementById("places");
+  const listHeadEl = document.getElementById("listHead");
+  const searchEl = document.getElementById("search");
+
+  function renderCrumbs() {
+    const parts = [{ label: "All places", place: {} }];
+    const acc = {};
+    for (const l of LEVELS) {
+      if (!sel[l]) break;
+      acc[l] = sel[l];
+      parts.push({ label: sel[l], place: Object.assign({}, acc) });
+    }
+    crumbsEl.innerHTML = parts.map((p, i) => i === parts.length - 1
+      ? '<span class="here">' + F.esc(p.label) + "</span>"
+      : '<a data-crumb="' + i + '">' + F.esc(p.label) + "</a>").join('<span class="sep">›</span>');
+    crumbsEl.querySelectorAll("[data-crumb]").forEach(a =>
+      a.addEventListener("click", () => go(Object.assign({}, parts[Number(a.dataset.crumb)].place))));
+  }
+
+  // Lists the next level's places, or, in a town, its months
+  function renderList(logs) {
+    const level = nextLevel(sel);
+    const q = searchEl.value.trim().toLowerCase();
+    let rows = [];
+    if (level) {
+      const groups = new Map();
+      for (const x of logs) {
+        const v = valueAt(x.s, level);
+        if (!groups.has(v)) groups.set(v, []);
+        groups.get(v).push(x);
+      }
+      rows = [...groups.entries()]
+        .map(([name, g]) => ({ name, st: stats(g) }))
+        .sort((a, b) => b.st.caches - a.st.caches || a.name.localeCompare(b.name));
+      listHeadEl.textContent = rows.length + " " + LEVEL_NAMES[level][rows.length === 1 ? 0 : 1] +
+        (sel.year ? " in " + sel.year : "") + " · most caches first";
+      searchEl.hidden = rows.length < 12;
+      if (q) rows = rows.filter(r => r.name.toLowerCase().includes(q));
+      listEl.innerHTML = rows.length ? rows.map(r =>
+        '<li data-name="' + F.esc(r.name) + '"><span class="go">›</span><div class="name">' + F.esc(r.name) + "</div>" +
+        '<div class="meta">' + statsText(r.st) + "</div></li>").join("")
+        : '<li class="none">No places match.</li>';
+    } else {
+      // In a town: its caching months, newest first
+      const months = new Map();
+      for (const x of logs) {
+        const m = x.date.slice(0, 7);
+        if (!months.has(m)) months.set(m, []);
+        months.get(m).push(x);
+      }
+      rows = [...months.entries()].sort((a, b) => b[0].localeCompare(a[0]));
+      listHeadEl.textContent = F.plural(rows.length, "month") + " with caching here · click one to open its days";
+      searchEl.hidden = true;
+      listEl.innerHTML = rows.map(([m, g]) => {
+        const st = stats(g);
+        return '<li data-month="' + m + '"><span class="go">›</span><div class="name">' +
+          MONTH_NAMES[Number(m.slice(5)) - 1] + " " + m.slice(0, 4) + "</div>" +
+          '<div class="meta">' + F.plural(st.days, "day") + " · " + F.plural(st.caches, "cache") + "</div></li>";
+      }).join("");
+    }
+  }
+
+  listEl.addEventListener("click", e => {
+    const li = e.target.closest("li");
+    if (!li) return;
+    if (li.dataset.month) openMonth(li.dataset.month);
+    else if (li.dataset.name) {
+      const level = nextLevel(sel);
+      const next = Object.assign({}, sel);
+      next[level] = li.dataset.name;
+      go(next);
+    }
+  });
+  searchEl.addEventListener("input", () => renderList(currentLogs()));
+
+  // Opens Days Replay showing only this place's caching days in that month
+  function openMonth(month) {
+    const q = new URLSearchParams();
+    for (const l of LEVELS) if (sel[l]) q.set(l, sel[l]);
+    q.set("month", month);
+    location.href = "day-replay.html?" + q.toString();
+  }
+
+  // ---------- top bar ----------
+  const titleEl = document.getElementById("placeTitle");
+  const statsEl = document.getElementById("placeStats");
+  const yearEl = document.getElementById("year");
+
+  function renderYears(allLogs) {
+    const counts = new Map();
+    for (const x of allLogs) {
+      const y = x.date.slice(0, 4);
+      if (!counts.has(y)) counts.set(y, new Set());
+      counts.get(y).add(x.date);
+    }
+    const years = [...counts.keys()].sort().reverse();
+    if (sel.year && !counts.has(sel.year)) delete sel.year;
+    yearEl.innerHTML = '<option value="">All years</option>' + years.map(y =>
+      '<option value="' + y + '">' + y + " (" + F.plural(counts.get(y).size, "day") + ")</option>").join("");
+    yearEl.value = sel.year || "";
+  }
+  yearEl.addEventListener("change", () => {
+    const next = Object.assign({}, sel);
+    if (yearEl.value) next.year = yearEl.value; else delete next.year;
+    go(next);
+  });
+
+  // ---------- map ----------
+  const map = L.map("map", { zoomControl: true }).setView([53.54, -113.49], 6);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 19,
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors · Place names &copy; <a href="https://www.geonames.org">GeoNames</a> (<a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>) · Boundaries: <a href="https://www.statcan.gc.ca/en/reference/licence">Statistics Canada</a>'
+  }).addTo(map);
+  const calLayer = L.layerGroup().addTo(map);
+
+  const hint = L.control({ position: "bottomright" });
+  hint.onAdd = function () { this._div = L.DomUtil.create("div", "legend"); return this._div; };
+  hint.addTo(map);
+
+  // One calendar per year (All years) or per month (a year chosen), placed
+  // in the middle of that period's finds in this place
+  let calendars = [];
+  function renderMap(logs) {
+    calendars = [];
+    const byYear = !sel.year;
+    const groups = new Map();
+    for (const x of logs) {
+      const key = byYear ? x.date.slice(0, 4) : x.date.slice(0, 7);
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key).push(x);
+    }
+    const keys = [...groups.keys()].sort();
+    keys.forEach((key, i) => {
+      const g = groups.get(key);
+      const lat = g.reduce((n, x) => n + x.s.lat, 0) / g.length;
+      const lon = g.reduce((n, x) => n + x.s.lon, 0) / g.length;
+      const days = new Set(g.map(x => x.date)).size;
+      const top = byYear ? key : F.MONTHS[Number(key.slice(5)) - 1] + " " + key.slice(0, 4);
+      const icon = L.divIcon({
+        className: "",
+        html: '<div class="cal' + (byYear ? " year" : "") + '"><div class="top">' + top + "</div>" +
+          '<div class="num">' + days + '</div><div class="lbl">' + (days === 1 ? "day" : "days") + "</div></div>",
+        iconSize: [58, 54],
+        iconAnchor: [29, 27]
+      });
+      const label = byYear ? key : MONTH_NAMES[Number(key.slice(5)) - 1] + " " + key.slice(0, 4);
+      calendars.push({
+        lat, lon, icon, i,
+        tip: label + " · " + F.plural(days, "day") + ", " + F.plural(g.length, "cache") +
+          (byYear ? " · click to see its months" : " · click to open these days"),
+        click: () => { if (byYear) go(Object.assign({}, sel, { year: key })); else openMonth(key); }
+      });
+    });
+    hint._div.innerHTML = byYear
+      ? "Each calendar is a <b>year</b> of caching here.<br>Click one (or choose a year above) to see its months."
+      : "Each calendar is a <b>month</b> in " + sel.year + ".<br>Click one to open those days.";
+    return logs.map(x => [x.s.lat, x.s.lon]);
+  }
+
+  // Calendars that would overlap at this zoom are laid out side by side in a
+  // small grid (in date order) around where they'd be, so each can be read
+  // and clicked. Done again after every zoom.
+  const CAL_W = 64, CAL_H = 60;
+  function layoutCalendars() {
+    calLayer.clearLayers();
+    const clusters = [];
+    for (const c of calendars) {
+      const pt = map.latLngToLayerPoint([c.lat, c.lon]);
+      const near = clusters.find(k => Math.abs(k.x - pt.x) < CAL_W * Math.sqrt(k.items.length) &&
+        Math.abs(k.y - pt.y) < CAL_H * Math.sqrt(k.items.length));
+      if (near) {
+        near.items.push(c);
+        near.x = (near.x * (near.items.length - 1) + pt.x) / near.items.length;
+        near.y = (near.y * (near.items.length - 1) + pt.y) / near.items.length;
+      } else {
+        clusters.push({ x: pt.x, y: pt.y, items: [c] });
+      }
+    }
+    for (const k of clusters) {
+      const n = k.items.length;
+      const cols = Math.ceil(Math.sqrt(n * 1.4));
+      const rows = Math.ceil(n / cols);
+      k.items.forEach((c, j) => {
+        const dx = ((j % cols) - (cols - 1) / 2) * CAL_W;
+        const dy = (Math.floor(j / cols) - (rows - 1) / 2) * CAL_H;
+        const at = n === 1 ? L.latLng(c.lat, c.lon) : map.layerPointToLatLng(L.point(k.x + dx, k.y + dy));
+        const m = L.marker(at, { icon: c.icon, zIndexOffset: c.i * 10, riseOnHover: true }).addTo(calLayer);
+        m.bindTooltip(c.tip, { direction: "top", offset: [0, -24] });
+        m.on("click", c.click);
+      });
+    }
+  }
+  map.on("zoomend", layoutCalendars);
+
+  function fit(points) {
+    if (points.length === 1) map.setView(points[0], 13, { animate: false });
+    else if (points.length) map.fitBounds(L.latLngBounds(points), { padding: [70, 70], maxZoom: 14, animate: false });
+  }
+
+  // ---------- put it together ----------
+  function currentLogs() {
+    const all = placeLogs(sel);
+    return sel.year ? all.filter(x => x.date.startsWith(sel.year)) : all;
+  }
+
+  function render(refit) {
+    const all = placeLogs(sel);
+    renderYears(all);
+    const logs = currentLogs();
+    renderCrumbs();
+    renderList(logs);
+    const name = placeName(sel);
+    titleEl.textContent = name + (sel.year ? " — " + sel.year : "");
+    statsEl.textContent = statsText(stats(logs));
+    document.title = name + " – Browse by Location";
+    const points = renderMap(logs);
+    if (refit) fit(points);
+    layoutCalendars();
+  }
+
+  if (!DAYS.length) {
+    titleEl.textContent = "No data found. Load your My Finds file on the Dashboard.";
+    return;
+  }
+  readAddress();
+  render(true);
+})();
+</script>
+</body>
+</html>

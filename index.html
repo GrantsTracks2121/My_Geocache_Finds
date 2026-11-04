@@ -10,7 +10,7 @@
 <nav class="site-nav">
   <a href="index.html" class="here">Dashboard</a>
   <a href="day-replay.html">Browse by Date</a>
-  <span class="later" title="Coming soon">Browse by Location</span>
+  <a href="location.html">Browse by Location</a>
   <a href="trips.html">Trips</a>
   <a href="favorites.html">Favourites</a>
 </nav>
@@ -29,11 +29,11 @@
     <p>Replay any caching day on a map, by year and month.</p>
     <div class="figures" id="date-figures">–</div>
   </a>
-  <div class="section-card later">
-    <h3>Browse by Location <span class="soon">Coming soon</span></h3>
-    <p>Your finds by country, province and state.</p>
+  <a class="section-card" href="location.html">
+    <h3>Browse by Location</h3>
+    <p>Drill down from country to province or state to town, and see when you cached there.</p>
     <div class="figures" id="place-figures">–</div>
-  </div>
+  </a>
   <a class="section-card" href="trips.html">
     <h3>Trips</h3>
     <p>Name a date range and see its caching days together.</p>
@@ -113,7 +113,8 @@
     const countries = new Set(stops.map(s => s.country).filter(Boolean));
     const regions = new Set(stops.filter(s => s.state && s.state !== "None").map(s => s.state + "|" + s.country));
     document.getElementById("place-figures").innerHTML =
-      "<strong>" + countries.size + "</strong> countries · <strong>" + regions.size + "</strong> provinces &amp; states";
+      "<strong>" + countries.size + "</strong> countries · <strong>" + regions.size + "</strong> provinces &amp; states<br>" +
+      "<strong>" + num(new Set(stops.filter(s => s.town).map(s => s.state + "|" + s.town)).size) + "</strong> towns";
 
     renderFavorites();
     renderTrips();
