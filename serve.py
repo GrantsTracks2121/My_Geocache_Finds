@@ -3,7 +3,8 @@
 Geocache Day Replay - local web server.
 
 Shows the pages in this folder (like `python3 -m http.server`) and also
-saves your favourite days to favorites.json in this folder.
+saves your favourite days to favorites.json and site-wide settings to
+settings.json in this folder.
 
 Usage (from Terminal, in this folder):
     python3 serve.py          # http://localhost:8002/day-replay.html
@@ -26,6 +27,31 @@ FAVORITES_PATH = HERE / "favorites.json"
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
+SETTINGS_PATH = HERE / "settings.json"
+# Site-wide settings, their allowed values and defaults. A future Dashboard
+# page will change these; for now they can be edited in settings.json.
+SETTINGS = {
+    # Sequence of Daily Finds: "auto" plays the route when a day is chosen,
+    # "manual" shows all the day's caches and waits for the Play button.
+    "dailyFindsSequence": (("auto", "manual"), "auto"),
+}
+
+
+def read_settings():
+    try:
+        saved = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        saved = {}
+    return {key: saved.get(key) if saved.get(key) in allowed else default
+            for key, (allowed, default) in SETTINGS.items()}
+
+
+def write_json(path, data):
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
+    os.replace(tmp, path)
+
+
 def read_favorites():
     try:
         data = json.loads(FAVORITES_PATH.read_text(encoding="utf-8"))
@@ -36,9 +62,7 @@ def read_favorites():
 
 
 def write_favorites(data):
-    tmp = FAVORITES_PATH.with_suffix(".json.tmp")
-    tmp.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, FAVORITES_PATH)
+    write_json(FAVORITES_PATH, data)
 
 
 class Handler(SimpleHTTPRequestHandler):
@@ -57,18 +81,38 @@ class Handler(SimpleHTTPRequestHandler):
         super().end_headers()
 
     def do_GET(self):
-        if self.path.split("?")[0] == "/api/favorites":
+        path = self.path.split("?")[0]
+        if path == "/api/favorites":
             self.send_json(200, read_favorites())
+        elif path == "/api/settings":
+            self.send_json(200, read_settings())
         else:
             super().do_GET()
 
+    def read_body(self):
+        length = int(self.headers.get("Content-Length", 0))
+        return json.loads(self.rfile.read(min(length, 1_000_000)))
+
     def do_POST(self):
-        if self.path.split("?")[0] != "/api/favorites":
+        path = self.path.split("?")[0]
+        if path == "/api/settings":
+            try:
+                incoming = self.read_body()
+                settings = read_settings()
+                for key, value in incoming.items():
+                    if key in SETTINGS and value in SETTINGS[key][0]:
+                        settings[key] = value
+            except (ValueError, AttributeError):
+                self.send_json(400, {"error": "bad settings data"})
+                return
+            write_json(SETTINGS_PATH, settings)
+            self.send_json(200, settings)
+            return
+        if path != "/api/favorites":
             self.send_json(404, {"error": "not found"})
             return
         try:
-            length = int(self.headers.get("Content-Length", 0))
-            incoming = json.loads(self.rfile.read(min(length, 1_000_000)))
+            incoming = self.read_body()
             days = sorted({d for d in incoming.get("days", []) if isinstance(d, str) and DATE_RE.match(d)},
                           reverse=True)
         except (ValueError, AttributeError):

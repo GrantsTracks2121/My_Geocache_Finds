@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Geocache Day Replay</title>
+<title>Geocaching Days Replay</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="lib/leaflet.css">
 <style>
@@ -82,8 +82,18 @@
   #bar #favStar.on { color: #e3a008; }
   #bar #favStar:disabled { opacity: .35; cursor: default; }
   #days .fav { color: #e3a008; margin-left: 4px; }
-  #dayTitle { font-size: 16px; font-weight: 600; flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #progress { color: var(--muted); font-variant-numeric: tabular-nums; }
+  #dayTitle { font-size: 16px; font-weight: 600; flex: 0 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #progress { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+  /* Finding sequence controls, boxed in the top bar's right-hand corner */
+  #sequence {
+    margin-left: auto;
+    flex: none;
+    display: flex; align-items: center; gap: 10px;
+    padding: 4px 6px 4px 4px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #faf9f6;
+  }
   #bar button {
     font: inherit;
     padding: 5px 12px;
@@ -163,7 +173,7 @@
 
 <aside id="sidebar">
   <header>
-    <h1>Geocache Day Replay</h1>
+    <h1>Geocaching Days Replay</h1>
     <div class="filters">
       <select id="yearFilter" aria-label="Year"></select>
       <select id="monthFilter" aria-label="Month"></select>
@@ -178,14 +188,16 @@
     <button id="favStar" type="button" aria-pressed="false" disabled>☆</button>
     <div id="dayTitle">Choose a day</div>
     <span id="progress"></span>
-    <label>Speed
-      <select id="speed">
-        <option value="2">Slow</option>
-        <option value="1" selected>Normal</option>
-        <option value="0.4">Fast</option>
-      </select>
-    </label>
-    <button id="replay" type="button">Replay</button>
+    <div id="sequence" role="group" aria-label="Finding sequence">
+      <button id="play" type="button">▶ Play</button>
+      <label>Speed
+        <select id="speed">
+          <option value="2">Slow</option>
+          <option value="1" selected>Normal</option>
+          <option value="0.4">Fast</option>
+        </select>
+      </label>
+    </div>
   </div>
   <div id="mapWrap">
     <div id="map"></div>
@@ -449,14 +461,46 @@
   const progressEl = document.getElementById("progress");
   const speedEl = document.getElementById("speed");
 
+  // Sequence of Daily Finds: "auto" plays the finding sequence as soon as a
+  // day is chosen; "manual" shows all the day's caches and waits for Play.
+  // Saved in settings.json (to be changed from a future Dashboard page).
+  let sequenceMode = "auto";
+
   function selectDay(date) {
     currentDate = date;
     markActive();
     updateStar();
-    play();
+    if (sequenceMode === "manual") showAll(); else play();
   }
 
-  document.getElementById("replay").addEventListener("click", () => { if (currentDate) play(); });
+  document.getElementById("play").addEventListener("click", () => { if (currentDate) play(); });
+
+  function cacheCount(n) { return n + (n === 1 ? " cache" : " caches"); }
+
+  // Clear the map, title the day and zoom to its caches. Returns the day.
+  function startDay() {
+    runToken++;
+    const day = DAYS.find(d => d.date === currentDate);
+    if (!day) return null;
+    dayLayer.clearLayers();
+    closePanel();
+    titleEl.textContent = prettyDate(day.date) + " — " + autoTitle(day);
+    const points = day.stops.map(s => [s.lat, s.lon]);
+    if (points.length === 1) {
+      map.setView(points[0], 15);
+    } else {
+      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
+    }
+    return day;
+  }
+
+  // Manual mode: all the day's caches at once, no route line
+  function showAll() {
+    const day = startDay();
+    if (!day) return;
+    day.stops.forEach((s, i) => addPin(s, i));
+    progressEl.textContent = cacheCount(day.stops.length);
+  }
 
   function addPin(stop, index) {
     const src = typeIcon(stop.type);
@@ -543,22 +587,15 @@
     });
   }
 
+  // The finding sequence: draws the day's route cache by cache.
+  // Pressing Play again (e.g. after changing speed) starts it over.
   async function play() {
-    const token = ++runToken;
-    const day = DAYS.find(d => d.date === currentDate);
+    const day = startDay();
     if (!day) return;
+    const token = runToken;
     const stops = day.stops;
-
-    dayLayer.clearLayers();
-    closePanel();
-    titleEl.textContent = prettyDate(day.date) + " — " + autoTitle(day);
-
     const points = stops.map(s => [s.lat, s.lon]);
-    if (points.length === 1) {
-      map.setView(points[0], 15);
-    } else {
-      map.fitBounds(L.latLngBounds(points), { padding: [40, 40], maxZoom: 16 });
-    }
+    progressEl.textContent = "0 / " + stops.length;
 
     // Keep long days watchable: about 30 seconds total at Normal speed
     const factor = Number(speedEl.value);
@@ -577,6 +614,17 @@
       addPin(stops[i], i);
       progressEl.textContent = (i + 1) + " / " + stops.length;
     }
+    if (!(await wait(800, token))) return;
+    progressEl.textContent = cacheCount(stops.length);
+  }
+
+  async function loadSettings() {
+    try {
+      const resp = await fetch("api/settings", { cache: "no-store" });
+      if (resp.ok) sequenceMode = (await resp.json()).dailyFindsSequence === "manual" ? "manual" : "auto";
+    } catch (err) {
+      // Not opened through serve.py: keep the default (auto)
+    }
   }
 
   // ---------- start ----------
@@ -588,8 +636,8 @@
   yearEl.value = DAYS[0].date.slice(0, 4);
   fillMonths(DAYS[0].date.slice(5, 7));
   renderList();
-  selectDay(DAYS[0].date);
   loadFavorites();
+  loadSettings().then(() => selectDay(DAYS[0].date));
 })();
 </script>
 </body>
