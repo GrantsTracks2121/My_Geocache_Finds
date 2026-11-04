@@ -64,9 +64,44 @@
     padding: 9px 16px;
     border-bottom: 1px solid var(--line);
     cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
   }
   #days li:hover { background: #f3f6f4; }
   #days li.active { background: #e3efe8; border-left: 4px solid var(--accent); padding-left: 12px; }
+  #days li.picked { background: #fbf1d2; }
+  #days li.picked:hover { background: #f7e8bb; }
+  #days li.picked.active { background: #f3e6bd; }
+
+  /* Several days selected: bar at the bottom of the list */
+  #selbar {
+    flex: none;
+    padding: 10px 16px 12px;
+    border-top: 1px solid #ecd9a0;
+    background: #fff8e5;
+    font-size: 13px;
+  }
+  #selbar .count { font-weight: 600; }
+  #selbar .range { color: var(--muted); font-size: 12px; margin: 1px 0 8px; }
+  #selbar .btns { display: flex; gap: 8px; }
+  #selbar button, #dayMenu button {
+    font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px;
+  }
+  #selbar .make { padding: 5px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
+  #selbar .clear { padding: 5px 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  #selbar[hidden], #dayMenu[hidden] { display: none; }
+
+  /* Right-click menu on selected days */
+  #dayMenu {
+    position: fixed; z-index: 2000; min-width: 220px; padding: 4px;
+    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.18);
+  }
+  #dayMenu button {
+    display: block; width: 100%; text-align: left; padding: 7px 10px;
+    border: none; background: none; color: var(--ink); font-weight: 500;
+  }
+  #dayMenu button:hover { background: #f3f1ea; }
   #days .date { font-weight: 600; }
   #days .meta { color: var(--muted); font-size: 12px; }
 
@@ -207,7 +242,19 @@
     <div id="summary"></div>
   </header>
   <ul id="days"></ul>
+  <div id="selbar" hidden>
+    <div class="count"></div>
+    <div class="range"></div>
+    <div class="btns">
+      <button class="make" type="button">Make a trip</button>
+      <button class="clear" type="button">Clear</button>
+    </div>
+  </div>
 </aside>
+<div id="dayMenu" hidden role="menu">
+  <button type="button" role="menuitem" data-act="trip"></button>
+  <button type="button" role="menuitem" data-act="clear">Clear selection</button>
+</div>
 
 <section id="main">
   <div id="bar">
@@ -424,10 +471,92 @@
     markActive();
   }
 
+  // ---------- selecting several days (to make a trip) ----------
+  // Click: replay that day (and select only it). Shift-click: select every
+  // caching day between the last clicked day and this one. Command-click:
+  // add or remove one day. Two or more selected days show the trip bar.
+  const picked = new Set();
+  let anchor = null;
+  const selbar = document.getElementById("selbar");
+  const dayMenu = document.getElementById("dayMenu");
+
+  function selectOnly(date) {
+    picked.clear();
+    if (date && date !== "trip") picked.add(date);
+    anchor = date;
+  }
+
+  function pickedRange() {
+    const dates = [...picked].sort();
+    return { start: dates[0], end: dates[dates.length - 1], count: dates.length };
+  }
+
+  function renderPicked() {
+    const many = picked.size >= 2;
+    listEl.querySelectorAll("li[data-date]").forEach(li =>
+      li.classList.toggle("picked", many && picked.has(li.dataset.date)));
+    selbar.hidden = !many;
+    if (many) {
+      const r = pickedRange();
+      selbar.querySelector(".count").textContent = r.count + " days selected";
+      selbar.querySelector(".range").textContent = Finds.dateRange(r.start, r.end);
+    }
+  }
+
+  function makeTrip() {
+    if (!picked.size) return;
+    const r = pickedRange();
+    location.href = "trips.html?start=" + r.start + "&end=" + r.end;
+  }
+
+  function clearPicked() {
+    selectOnly(currentDate);
+    renderPicked();
+  }
+
   listEl.addEventListener("click", e => {
     const li = e.target.closest("li[data-date]");
-    if (li) selectDay(li.dataset.date);
+    if (!li) return;
+    const date = li.dataset.date;
+    if (date !== "trip" && e.shiftKey && anchor && anchor !== "trip") {
+      const [a, b] = [anchor, date].sort();
+      DAYS.forEach(d => { if (d.date >= a && d.date <= b && (!trip || tripDayList.includes(d))) picked.add(d.date); });
+      renderPicked();
+    } else if (date !== "trip" && e.metaKey) {
+      if (picked.has(date)) picked.delete(date); else picked.add(date);
+      anchor = date;
+      renderPicked();
+    } else {
+      selectOnly(date);
+      selectDay(date);
+      renderPicked();
+    }
   });
+
+  selbar.querySelector(".make").addEventListener("click", makeTrip);
+  selbar.querySelector(".clear").addEventListener("click", clearPicked);
+
+  // Right-click on the selected days
+  listEl.addEventListener("contextmenu", e => {
+    const li = e.target.closest("li[data-date]");
+    if (!li || li.dataset.date === "trip") return;
+    e.preventDefault();
+    if (!picked.has(li.dataset.date)) { picked.clear(); picked.add(li.dataset.date); renderPicked(); }
+    const n = picked.size;
+    dayMenu.querySelector('[data-act="trip"]').textContent =
+      "Make a trip from " + (n === 1 ? "this day" : "these " + n + " days") + "…";
+    dayMenu.hidden = false;
+    dayMenu.style.left = Math.min(e.clientX, innerWidth - dayMenu.offsetWidth - 8) + "px";
+    dayMenu.style.top = Math.min(e.clientY, innerHeight - dayMenu.offsetHeight - 8) + "px";
+  });
+  dayMenu.addEventListener("click", e => {
+    const act = e.target.closest("[data-act]");
+    dayMenu.hidden = true;
+    if (!act) return;
+    if (act.dataset.act === "trip") makeTrip(); else clearPicked();
+  });
+  document.addEventListener("mousedown", e => { if (!dayMenu.contains(e.target)) dayMenu.hidden = true; });
+  listEl.addEventListener("scroll", () => { dayMenu.hidden = true; });
   yearEl.addEventListener("change", () => { fillMonths(monthEl.value); renderList(); });
   monthEl.addEventListener("change", renderList);
 
@@ -440,7 +569,9 @@
     let i = items.findIndex(li => li.dataset.date === currentDate);
     i = e.key === "ArrowDown" ? Math.min(items.length - 1, i + 1) : Math.max(0, i - 1);
     e.preventDefault();
+    selectOnly(items[i].dataset.date);
     selectDay(items[i].dataset.date);
+    renderPicked();
   });
 
   let currentDate = null;
@@ -504,6 +635,7 @@
       li.classList.toggle("active", on);
       if (on) li.scrollIntoView({ block: "nearest" });
     });
+    if (typeof renderPicked === "function") renderPicked();
   }
 
   // ---------- animation ----------
@@ -676,7 +808,7 @@
 
   panelEl.querySelector(".close").addEventListener("click", closePanel);
   map.on("click", closePanel);
-  document.addEventListener("keydown", e => { if (e.key === "Escape") closePanel(); });
+  document.addEventListener("keydown", e => { if (e.key === "Escape") { closePanel(); dayMenu.hidden = true; } });
 
   function wait(ms, token) {
     return new Promise(resolve => setTimeout(() => resolve(token === runToken), ms));
@@ -782,7 +914,9 @@
     renderList();
     loadFavorites();
     await loadSettings();
-    selectDay(trip ? (asked && tripDayList.some(d => d.date === asked) ? asked : "trip") : startDate);
+    const first = trip ? (asked && tripDayList.some(d => d.date === asked) ? asked : "trip") : startDate;
+    selectOnly(first);
+    selectDay(first);
   }
   start();
 })();

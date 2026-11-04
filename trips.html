@@ -207,6 +207,20 @@
     }
   }
 
+  // Dates sent from Days Replay's "Make a trip" (trips.html?start=...&end=...)
+  function prefillFromAddress() {
+    const q = new URLSearchParams(location.search);
+    const start = q.get("start"), end = q.get("end");
+    const ok = s => /^\d{4}-\d{2}-\d{2}$/.test(s || "");
+    if (!ok(start) || !ok(end)) return;
+    startEl.value = start <= end ? start : end;
+    endEl.value = start <= end ? end : start;
+    updatePreview();
+    nameEl.focus();
+    // So a refresh after saving doesn't fill the form again
+    history.replaceState(null, "", location.pathname);
+  }
+
   async function load() {
     if (!served) { render(); return; }
     try {
@@ -219,6 +233,7 @@
     }
     render();
   }
+  prefillFromAddress();
   load();
 })();
 </script>
