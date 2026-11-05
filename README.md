@@ -219,11 +219,15 @@ the boundaries are used automatically.
 
 In the past, if you found "Brass Caps" in Alberta and logged them on [The Brass Cap Cache](https://www.geocaching.com/geocache/GC43F3_brass-cap-cache-smith-dorrien-rd) page, or currently find them and log them as notes on the [Brass Cap Cache - A Memorial Puzzle](https://coord.info/GC72DVJ) page, you will want to read this section.
 
+### Some Background
+
 The [Brass Cap Cache](https://www.geocaching.com/geocache/GC43F3_brass-cap-cache-smith-dorrien-rd) was a "roving virtual" cache owned by [outforthehunt](https://www.geocaching.com/p/?guid=a4eb2247-f983-4f25-aa4e-03a36a9c094f). The location of the cache, one of thousands of brass survey markers located across the province, would be periodically changed on the same cache page, and cachers could log multiple finds on this one cache.
 
 In 2017, Groundspeak disallowed the practice of logging multiple finds for one cache, and the "Brass Cap Cache" was eventually archived. The current "My Finds" pocket query, therefore, only records the last brass cap location in Kananaskis listed on the page before it was archived.
 
-Why include brass cap finds? For example, if you found a cap on a street corner in Edmonton in the past, your "My Finds" will have a record of the find, but the map will display the location of that find at the only place it knows the GC43F3 cache to be: in Kananaskis.
+### Why include brass cap finds?
+
+For example, if you found a cap on a street corner in Edmonton in the past, your "My Finds" will have a record of the find, but the map will display the location of that find at the only place it knows the GC43F3 cache to be: in Kananaskis.
 
 Follow the process below to gather your Brass Cap find data.
 
