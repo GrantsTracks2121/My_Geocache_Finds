@@ -8,6 +8,8 @@ into caching days you can explore on a map:
   province or state and town
 - **Trips**: name a date range and see its caching days together
 - **Favourites**: star the days, trips and caches you like best
+- **Search**: find any cache by name or GC code, any place, any trip, or a
+  word you wrote in a log
 - **My Places**: name your own areas (a park, a neighbourhood, a hiking area) so
   day titles use them
 
@@ -245,6 +247,24 @@ Here's how to extract your Brass Cap find stats:
 The app reads your finds from that page and rebuilds your caching days. The first time, this can take a few minutes. When it's done, you'll see your caching name and how many brass cap finds it read.
 
 If you continue to find brass caps and post notes on the [Brass Cap Cache - A Memorial Puzzle](https://coord.info/GC72DVJ) cache page, you need to repeat this process periodically to update your finds.
+
+---
+
+## Searching your finds
+
+Every page has a search box: at the top right, or above the list on the map
+pages. Press **/** on any page to jump straight to it. Start typing, and
+results show up in groups:
+
+- **Places**: countries, provinces and states, towns, neighbourhoods and your
+  own My Places, with how many finds each has. Opens Browse by Location there.
+- **Trips**: by name or by a word in the trip's note. Plays the trip.
+- **Caches**: by name or GC code. Opens that caching day with the cache's log.
+- **Mentioned in your logs**: finds whose log contains what you typed (from 3
+  letters).
+
+Capitals and accents don't matter, so "quebec" finds Québec. Use the arrow
+keys and Return to open a result, or Escape to close the list.
 
 ---
 
