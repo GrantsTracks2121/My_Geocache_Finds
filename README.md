@@ -213,28 +213,36 @@ the boundaries are used automatically.
 
 ---
 
-## 6. Optional: Alberta Brass Cap Cache finds
+## The Brass Cap Cache - It's a Niche Alberta Thing
 
-This is only for cachers who logged the **Alberta Brass Cap Cache** (GC43F3,
-GC72DVJ or GC9P577). That one listing pointed at a different survey brass cap
-every few weeks, so your My Finds file puts all your brass cap logs at the
-listing's one spot. The app can put each find at the brass cap you actually
-found.
+**If "Brass Caps" are a new concept to you, you can safely skip this section.**
 
-1. Open your **Cacher Stats** page on the brass cap site and copy its address
-   from your browser's address bar. It looks like
-   `https://brasscap.albertabattlecache.ca/cacherbreakdown/….html`
-2. On the Dashboard, open **Settings** and scroll to the bottom, to
-   **Alberta Brass Cap Cache**.
-3. Paste the address into the box and click **Load brass caps**.
+In the past, if you found "Brass Caps" in Alberta and logged them on [The Brass Cap Cache](https://www.geocaching.com/geocache/GC43F3_brass-cap-cache-smith-dorrien-rd) page, or currently find them and log them as notes on the [Brass Cap Cache - A Memorial Puzzle](https://coord.info/GC72DVJ) page, you will want to read this section.
 
-The app reads your finds from that page and rebuilds your caching days. The
-first time, this can take a few minutes. When it's done, you'll see your caching
-name and how many brass cap finds it read.
+The [Brass Cap Cache](https://www.geocaching.com/geocache/GC43F3_brass-cap-cache-smith-dorrien-rd) was a "roving virtual" cache owned by [outforthehunt](https://www.geocaching.com/p/?guid=a4eb2247-f983-4f25-aa4e-03a36a9c094f). The location of the cache, one of thousands of brass survey markers located across the province, would be periodically changed on the same cache page, and cachers could log multiple finds on this one cache.
 
-Your logs still come from your My Finds file. The brass cap site only supplies
-where each cap is. To pick up brass caps you've found since, click
-**Update brass caps**. To stop using them, click **Remove**.
+In 2017, Groundspeak disallowed the practice of logging multiple finds for one cache, and the "Brass Cap Cache" was eventually archived. The current "My Finds" pocket query, therefore, only records the last brass cap location in Kananaskis listed on the page before it was archived.
+
+Why include brass cap finds? For example, if you found a cap on a street corner in Edmonton in the past, your "My Finds" will have a record of the find, but the map will display the location of that find at the only place it knows the GC43F3 cache to be: in Kananaskis.
+
+Follow the process below to gather your Brass Cap find data.
+
+### How to Gather Your Brass Cap Find Data
+
+A Calgary cacher [van der Decken](https://www.geocaching.com/p/?guid=7116f780-8a80-4287-8122-0291974cb7b8) maintains a wonderful "Stats & Logs" site that contains brass cap find statistics, both historical (at the [Brass Cap Cache](https://www.geocaching.com/geocache/GC43F3_brass-cap-cache-smith-dorrien-rd)) and current (at [Brass Cap Cache - A Memorial Puzzle](https://coord.info/GC72DVJ)).
+
+Here's how to extract your Brass Cap find stats:
+
+1. In a browser, open the [Brass Cap Cache • Stats & Logs](https://brasscap.albertabattlecache.ca/) site at https://brasscap.albertabattlecache.ca/.
+2. Click on the "Cacher Stats" link on the right-hand side of the page.
+3. Find your name on the list of finders and click it to view all your Brass Cap Finds.
+4. On your stats page, copy its address from your browser's address bar. It looks like https://brasscap.albertabattlecache.ca/cacherbreakdown/….html.
+5. On the My Geocache Finds Dashboard, open Settings and scroll to the bottom, to Alberta Brass Cap Cache.
+6. Paste the address into the box and click "Load brass caps".
+
+The app reads your finds from that page and rebuilds your caching days. The first time, this can take a few minutes. When it's done, you'll see your caching name and how many brass cap finds it read.
+
+If you continue to find brass caps and post notes on the [Brass Cap Cache - A Memorial Puzzle](https://coord.info/GC72DVJ) cache page, you need to repeat this process periodically to update your finds.
 
 ---
 
