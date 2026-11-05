@@ -11,11 +11,11 @@ into caching days you can explore on a map:
 - **My Places**: name your own areas (a park, a neighbourhood, a hiking area) so
   day titles use them
 
-It runs entirely on your own computer. Your finds, trips and notes stay in
+The app runs entirely on your own computer in a browser. Your finds, trips and notes stay in
 the app's folder and are never sent anywhere. The only thing it fetches from
 the internet is the map itself (from OpenStreetMap).
 
-It works on **Windows, macOS and Linux**.
+It works on **Windows, macOS and Linux** and is meant to be used on a desktop computer or laptop.
 
 ---
 
