@@ -46,7 +46,7 @@ It works on **Windows, macOS and Linux**.
    py -m pip install tzdata
    ```
    Without it the app still works, but it can't tell what time it was where
-   each cache is, so a find logged late in the evening can land on the next day.
+   each cache was found, so a find logged late in the evening can land on the next day.
 
 On Windows the command is **`py`**. Wherever the app or these instructions
 say `python3`, type `py` instead.
