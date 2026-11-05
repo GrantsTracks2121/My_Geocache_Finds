@@ -6,8 +6,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <link rel="stylesheet" href="lib/leaflet.css">
 <link rel="stylesheet" href="site.css">
+<link rel="stylesheet" href="theme.css">
+<script src="theme.js"></script>
 </head>
 <body>
+<div class="page">
 <nav class="site-nav">
   <a href="index.html" class="here">Dashboard</a>
   <a href="day-replay.html">Browse by Date</a>
@@ -58,7 +61,9 @@
   </a>
 </div>
 
-<h2>Settings</h2>
+<details class="fold settings-fold" id="settings">
+<summary>Settings <span class="count">Sequence of Daily Finds · Theme · Background · My Places</span></summary>
+<div class="fold-body">
 <div class="panel">
   <div class="setting">
     <span class="sname">Sequence of Daily Finds</span>
@@ -68,6 +73,29 @@
     </div>
     <span class="saved" id="settings-saved"></span>
     <span class="sdesc">Auto plays the finding sequence as soon as you choose a day. Manual shows all the day's caches at once; press Play to see the sequence.</span>
+  </div>
+</div>
+
+<div class="panel look-panel">
+  <div class="setting">
+    <span class="sname">Theme</span>
+    <div class="choice" role="radiogroup" aria-label="Theme">
+      <label><input type="radio" name="theme" value="light">Light</label>
+      <label><input type="radio" name="theme" value="dark">Dark</label>
+      <label><input type="radio" name="theme" value="auto">Match my System</label>
+    </div>
+    <span class="saved" id="theme-saved"></span>
+    <span class="sdesc">Colours for every page. "Match my System" follows your computer's light or dark appearance.</span>
+  </div>
+  <div class="setting bg-setting">
+    <span class="sname">Dashboard background</span>
+    <div class="bg-thumb" id="bg-thumb" title="Click or drop a picture here"><span id="bg-empty">No picture</span></div>
+    <div class="btns">
+      <button class="btn secondary small" type="button" id="bg-choose">Choose picture…</button>
+      <button class="btn danger small" type="button" id="bg-remove" hidden>Remove</button>
+    </div>
+    <span class="saved" id="bg-status"></span>
+    <span class="sdesc">A picture behind this page. Click the box or drop a picture on it. Landscape photos work best.</span>
   </div>
 </div>
 
@@ -102,6 +130,8 @@
     <div id="place-map"></div>
   </div>
 </div>
+</div><!-- .fold-body -->
+</details>
 
 <h2>Update the data</h2>
 <div class="dropzone" id="finds-drop">
@@ -109,6 +139,8 @@
   <div class="dz-sub">Drop the .zip or .gpx here (or click to choose).<br>
     Replaces your finds: every caching day, place name and log is rebuilt from it. This takes about half a minute.</div>
 </div>
+
+</div><!-- .page -->
 
 <script src="lib/leaflet.js"></script>
 <script src="data/days.js"></script>
@@ -326,6 +358,109 @@
 })();
 </script>
 <script>
+// ---------- Theme and Dashboard background (Settings) ----------
+(function () {
+  "use strict";
+  const served = location.protocol.startsWith("http");
+  const root = document.documentElement;
+
+  // Theme: Light / Dark / Match my System, saved to settings.json
+  const themeRadios = [...document.querySelectorAll('input[name="theme"]')];
+  const themeSaved = document.getElementById("theme-saved");
+  const showTheme = () => themeRadios.forEach(r => r.checked = r.value === (root.dataset.themeMode || "light"));
+  showTheme();
+  if (served) {
+    fetch("api/settings", { cache: "no-store" }).then(r => r.ok ? r.json() : null)
+      .then(j => { if (j && j.theme) { window.setTheme(j.theme); showTheme(); } }).catch(() => {});
+  } else {
+    themeRadios.forEach(r => r.disabled = true);
+  }
+  themeRadios.forEach(r => r.addEventListener("change", async () => {
+    window.setTheme(r.value);
+    themeSaved.textContent = "";
+    try {
+      const resp = await fetch("api/settings", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme: r.value })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+      themeSaved.textContent = "Saved";
+      setTimeout(() => { themeSaved.textContent = ""; }, 2000);
+    } catch (err) {
+      themeSaved.textContent = "Couldn't save. Is serve.py running?";
+    }
+  }));
+
+  // Background picture, saved as profile/background.* by serve.py
+  const thumb = document.getElementById("bg-thumb");
+  const empty = document.getElementById("bg-empty");
+  const choose = document.getElementById("bg-choose");
+  const remove = document.getElementById("bg-remove");
+  const status = document.getElementById("bg-status");
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/gif,image/webp";
+  input.hidden = true;
+  document.body.appendChild(input);
+
+  function showBackground(src) {
+    root.classList.toggle("has-bg", !!src);
+    if (src) {
+      root.style.setProperty("--bg-image", 'url("' + src + '")');
+      thumb.style.backgroundImage = 'url("' + src + '")';
+    } else {
+      root.style.removeProperty("--bg-image");
+      thumb.style.backgroundImage = "";
+    }
+    empty.hidden = !!src;
+    remove.hidden = !src;
+    choose.textContent = src ? "Change picture…" : "Choose picture…";
+  }
+
+  async function send(file) {
+    if (!file) return;
+    if (!served) { status.textContent = "Start serve.py to add a background."; return; }
+    status.textContent = "Saving…";
+    try {
+      const resp = await fetch("api/picture?kind=background", { method: "POST", body: file });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error);
+      showBackground(j.picture);
+      status.textContent = "";
+    } catch (err) {
+      status.textContent = err.message === "Failed to fetch" ? "Could not reach the server. Is serve.py running?" : err.message;
+    }
+  }
+
+  choose.addEventListener("click", () => input.click());
+  thumb.addEventListener("click", () => input.click());
+  input.addEventListener("change", () => { send(input.files[0]); input.value = ""; });
+  thumb.addEventListener("dragover", e => { e.preventDefault(); thumb.classList.add("over"); });
+  thumb.addEventListener("dragleave", () => thumb.classList.remove("over"));
+  thumb.addEventListener("drop", e => {
+    e.preventDefault(); e.stopPropagation();
+    thumb.classList.remove("over");
+    send(e.dataTransfer.files[0]);
+  });
+  remove.addEventListener("click", async () => {
+    if (!confirm("Remove the Dashboard background picture?")) return;
+    try {
+      await fetch("api/picture/remove?kind=background", { method: "POST" });
+      showBackground(null);
+    } catch (err) {
+      status.textContent = "Could not reach the server. Is serve.py running?";
+    }
+  });
+
+  if (served) {
+    fetch("api/picture", { cache: "no-store" }).then(r => r.ok ? r.json() : {})
+      .then(j => showBackground(j.background || null)).catch(() => showBackground(null));
+  } else {
+    showBackground(null);
+  }
+})();
+</script>
+<script>
 // ---------- Dashboard picture (saved in profile/ by serve.py) ----------
 (function () {
   "use strict";
@@ -466,6 +601,9 @@
 
   // ---- map: your caches as small dots, places as circles and rectangles ----
   const map = L.map("place-map", { preferCanvas: true }).setView([53.45, -113.4], 9);
+  document.getElementById("settings").addEventListener("toggle", e => {
+    if (e.target.open) setTimeout(() => map.invalidateSize(), 0);
+  });
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
   }).addTo(map);

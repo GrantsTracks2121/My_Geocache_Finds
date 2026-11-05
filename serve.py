@@ -6,7 +6,7 @@ Shows the pages in this folder (like `python3 -m http.server`) and also:
   - saves your favourite days, trips and caches to favorites.json
   - saves site-wide settings to settings.json
   - saves your trips (a name and a date range) to trips.json
-  - saves the Dashboard picture to profile/picture.*
+  - saves the Dashboard picture and background to profile/
   - saves My Places (your own named areas) to places.json and rebuilds
     data/days.js so day titles use them
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
@@ -44,6 +44,8 @@ SETTINGS = {
     # Sequence of Daily Finds: "auto" plays the route when a day is chosen,
     # "manual" shows all the day's caches and waits for the Play button.
     "dailyFindsSequence": (("auto", "manual"), "auto"),
+    # Colours for every page: light, dark, or "auto" to follow the Mac's setting
+    "theme": (("light", "dark", "auto"), "light"),
 }
 
 MAX_UPLOAD = 400 * 1024 * 1024     # bytes
@@ -165,14 +167,23 @@ def rebuild_days():
 
 PROFILE_DIR = HERE / "profile"
 PICTURE_TYPES = {b"\x89PNG": ".png", b"\xff\xd8\xff": ".jpg", b"GIF8": ".gif"}
-MAX_PICTURE = 15 * 1024 * 1024
+MAX_PICTURE = 25 * 1024 * 1024
 
 
-def current_picture():
-    """The Dashboard picture's address, or None."""
-    for f in sorted(PROFILE_DIR.glob("picture.*")) if PROFILE_DIR.exists() else []:
+PICTURE_KINDS = ("picture", "background")   # the Dashboard picture and its background
+
+
+def current_picture(kind="picture"):
+    """The address of the Dashboard picture (or background), or None."""
+    for f in sorted(PROFILE_DIR.glob(kind + ".*")) if PROFILE_DIR.exists() else []:
         return f"profile/{f.name}?v={int(f.stat().st_mtime)}"
     return None
+
+
+def picture_kind(path):
+    q = path.partition("?")[2]
+    kind = dict(x.split("=", 1) for x in q.split("&") if "=" in x).get("kind", "picture")
+    return kind if kind in PICTURE_KINDS else "picture"
 
 
 def picture_type(data):
@@ -295,7 +306,7 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == "/api/places":
             self.send_json(200, read_places())
         elif path == "/api/picture":
-            self.send_json(200, {"picture": current_picture()})
+            self.send_json(200, {k: current_picture(k) for k in PICTURE_KINDS})
         else:
             super().do_GET()
 
@@ -316,19 +327,20 @@ class Handler(SimpleHTTPRequestHandler):
         elif path == "/api/places":
             self.post_places()
         elif path == "/api/picture":
-            self.post_picture()
+            self.post_picture(picture_kind(self.path))
         elif path == "/api/picture/remove":
-            for f in PROFILE_DIR.glob("picture.*") if PROFILE_DIR.exists() else []:
+            kind = picture_kind(self.path)
+            for f in PROFILE_DIR.glob(kind + ".*") if PROFILE_DIR.exists() else []:
                 f.unlink()
             self.send_json(200, {"ok": True, "picture": None})
         else:
             self.send_json(404, {"error": "not found"})
 
-    def post_picture(self):
-        """Save the Dashboard picture (PNG, JPEG, GIF or WebP) as profile/picture.*"""
+    def post_picture(self, kind="picture"):
+        """Save the Dashboard picture or background (PNG, JPEG, GIF or WebP) as profile/<kind>.*"""
         length = int(self.headers.get("Content-Length", 0))
         if length <= 0 or length > MAX_PICTURE:
-            self.send_json(200, {"ok": False, "error": "That picture is empty or larger than 15 MB."})
+            self.send_json(200, {"ok": False, "error": "That picture is empty or larger than 25 MB."})
             return
         data = self.rfile.read(length)
         try:
@@ -339,10 +351,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, {"ok": False, "error": str(err)})
             return
         PROFILE_DIR.mkdir(exist_ok=True)
-        for f in PROFILE_DIR.glob("picture.*"):
+        for f in PROFILE_DIR.glob(kind + ".*"):
             f.unlink()
-        (PROFILE_DIR / ("picture" + ext)).write_bytes(data)
-        self.send_json(200, {"ok": True, "picture": current_picture()})
+        (PROFILE_DIR / (kind + ext)).write_bytes(data)
+        self.send_json(200, {"ok": True, "picture": current_picture(kind)})
 
     def post_places(self):
         """Replace My Places with the list the page sends, then rebuild days.js

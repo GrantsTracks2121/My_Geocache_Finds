@@ -56,7 +56,7 @@
     padding: 4px 6px;
     border: 1px solid var(--line);
     border-radius: 6px;
-    background: #fff;
+    background: var(--field);
   }
   #summary { color: var(--muted); font-size: 12px; margin-top: 8px; }
   #days { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
@@ -67,18 +67,18 @@
     user-select: none;
     -webkit-user-select: none;
   }
-  #days li:hover { background: #f3f6f4; }
-  #days li.active { background: #e3efe8; border-left: 4px solid var(--accent); padding-left: 12px; }
-  #days li.picked { background: #fbf1d2; }
-  #days li.picked:hover { background: #f7e8bb; }
-  #days li.picked.active { background: #f3e6bd; }
+  #days li:hover { background: var(--row-hover); }
+  #days li.active { background: var(--row-active); border-left: 4px solid var(--accent); padding-left: 12px; }
+  #days li.picked { background: var(--pick); }
+  #days li.picked:hover { background: var(--pick-hover); }
+  #days li.picked.active { background: var(--pick-active); }
 
   /* Several days selected: bar at the bottom of the list */
   #selbar {
     flex: none;
     padding: 10px 16px 12px;
-    border-top: 1px solid #ecd9a0;
-    background: #fff8e5;
+    border-top: 1px solid var(--notice-line);
+    background: var(--notice-bg);
     font-size: 13px;
   }
   #selbar .count { font-weight: 600; }
@@ -88,20 +88,20 @@
     font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; border-radius: 6px;
   }
   #selbar .make { padding: 5px 12px; border: 1px solid var(--accent); background: var(--accent); color: #fff; }
-  #selbar .clear { padding: 5px 12px; border: 1px solid var(--line); background: #fff; color: var(--ink); }
+  #selbar .clear { padding: 5px 12px; border: 1px solid var(--line); background: var(--field); color: var(--ink); }
   #selbar[hidden], #dayMenu[hidden] { display: none; }
 
   /* Right-click menu on selected days */
   #dayMenu {
     position: fixed; z-index: 2000; min-width: 220px; padding: 4px;
-    background: #fff; border: 1px solid var(--line); border-radius: 8px;
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
     box-shadow: 0 4px 16px rgba(0,0,0,.18);
   }
   #dayMenu button {
     display: block; width: 100%; text-align: left; padding: 7px 10px;
     border: none; background: none; color: var(--ink); font-weight: 500;
   }
-  #dayMenu button:hover { background: #f3f1ea; }
+  #dayMenu button:hover { background: var(--soft2); }
   #days .date { font-weight: 600; }
   #days .meta { color: var(--muted); font-size: 12px; }
 
@@ -119,10 +119,10 @@
     font: 24px/1 sans-serif;
     width: 32px; height: 32px; padding: 0;
     border: none; border-radius: 6px;
-    background: none; color: #b8b2a6;
+    background: none; color: var(--star-off);
     cursor: pointer;
   }
-  #bar #favStar:hover:not(:disabled) { background: #f3f1ea; }
+  #bar #favStar:hover:not(:disabled) { background: var(--soft2); }
   #bar #favStar.on { color: #e3a008; }
   #bar #favStar:disabled { opacity: .35; cursor: default; }
   #days .fav { color: #e3a008; margin-left: 4px; }
@@ -136,7 +136,7 @@
     padding: 4px 6px 4px 4px;
     border: 1px solid var(--line);
     border-radius: 8px;
-    background: #faf9f6;
+    background: var(--bar2);
   }
   #bar button {
     font: inherit;
@@ -148,6 +148,7 @@
     cursor: pointer;
   }
   #bar label { color: var(--muted); }
+  #bar select { background: var(--field); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; font: inherit; padding: 3px 5px; }
   #mapWrap { flex: 1; position: relative; min-height: 0; }
   #map { position: absolute; inset: 0; }
 
@@ -170,15 +171,15 @@
     font: 18px/1 sans-serif; color: var(--muted);
     background: none; border: none; border-radius: 6px; cursor: pointer;
   }
-  #panel .close:hover { background: #eee; color: var(--ink); }
+  #panel .close:hover { background: var(--hover); color: var(--ink); }
   #panel h2 { font-size: 17px; margin: 0 64px 8px 0; line-height: 1.3; }
   #panel .cstar {
     position: absolute; top: 10px; right: 44px;
     width: 30px; height: 30px; padding: 0;
-    font: 22px/1 sans-serif; color: #b8b2a6;
+    font: 22px/1 sans-serif; color: var(--star-off);
     background: none; border: none; border-radius: 6px; cursor: pointer;
   }
-  #panel .cstar:hover:not(:disabled) { background: #eee; }
+  #panel .cstar:hover:not(:disabled) { background: var(--hover); }
   #panel .cstar.on { color: #e3a008; }
   #panel .cstar:disabled { opacity: .35; cursor: default; }
   /* Favourite cache: small gold star on its map marker */
@@ -211,7 +212,7 @@
   #panel .log a { color: var(--accent); }
 
   .legend {
-    background: rgba(255,255,255,.92);
+    background: var(--legend-bg);
     padding: 6px 10px;
     border-radius: 6px;
     font-size: 12px;
@@ -239,6 +240,8 @@
   .leaflet-popup-content { font-size: 13px; }
   .leaflet-popup-content b { font-size: 14px; }
 </style>
+<link rel="stylesheet" href="theme.css">
+<script src="theme.js"></script>
 </head>
 <body>
 

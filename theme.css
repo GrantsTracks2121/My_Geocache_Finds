@@ -1,0 +1,75 @@
+/* Light and dark colours shared by every page (see theme.js).
+   Each page sets its own light colours; this file adds the extra shades they
+   use and swaps everything for dark mode. */
+:root {
+  --hover: #ececea;
+  --hover2: #dddcd6;
+  --soft: #f6f6f2;
+  --soft2: #f3f1ea;
+  --field: #fff;
+  --notice-bg: #fff8e5;
+  --notice-line: #ecd9a0;
+  --ok-bg: #eef5f0;
+  --line-strong: #b8b8b0;
+  --danger-line: #e4c3b5;
+  --danger-bg: #fbeee8;
+  --star-off: #b8b2a6;
+  --label-bg: rgba(255, 255, 255, .85);
+  --label-ink: #1f4f8f;
+  --row-hover: #f3f6f4;
+  --row-active: #e3efe8;
+  --pick: #fbf1d2;
+  --pick-hover: #f7e8bb;
+  --pick-active: #f3e6bd;
+  --legend-bg: rgba(255, 255, 255, .92);
+  --bar2: #faf9f6;
+  --page-bg: rgba(250, 250, 247, .94);
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #16191c;
+  --panel: #202428;
+  --ink: #e4e6e8;
+  --muted: #9ba2a9;
+  --line: #363c42;
+  --accent: #4f9a6c;
+  --accent-dark: #3f8159;
+  --gold: #f0b429;
+  --danger: #e58a6a;
+  --hover: #2c3237;
+  --hover2: #383f45;
+  --soft: #262b30;
+  --soft2: #2c3237;
+  --field: #1a1d21;
+  --notice-bg: #3a3220;
+  --notice-line: #6b5a2a;
+  --ok-bg: #1e3326;
+  --line-strong: #4a5158;
+  --danger-line: #6b3a2a;
+  --danger-bg: #3a2520;
+  --star-off: #6b7178;
+  --label-bg: rgba(32, 36, 40, .85);
+  --label-ink: #9cc2f5;
+  --row-hover: #262b30;
+  --row-active: #1f3a2b;
+  --pick: #3d3520;
+  --pick-hover: #4a4026;
+  --pick-active: #4f4528;
+  --legend-bg: rgba(32, 36, 40, .92);
+  --bar2: #1c2024;
+  --page-bg: rgba(22, 25, 28, .92);
+}
+
+/* Maps in dark mode: darken the street map, and the map's own buttons */
+:root[data-theme="dark"] .leaflet-tile-pane { filter: invert(1) hue-rotate(180deg) brightness(.92) contrast(.88); }
+:root[data-theme="dark"] .leaflet-container { background: #1d2125; }
+:root[data-theme="dark"] .leaflet-bar a { background: var(--panel); color: var(--ink); border-bottom-color: var(--line); }
+:root[data-theme="dark"] .leaflet-bar a:hover { background: var(--hover); }
+:root[data-theme="dark"] .leaflet-control-attribution { background: rgba(32, 36, 40, .8); color: var(--muted); }
+:root[data-theme="dark"] .leaflet-control-attribution a { color: var(--accent); }
+:root[data-theme="dark"] .leaflet-tooltip { background: var(--panel); color: var(--ink); border-color: var(--line); }
+:root[data-theme="dark"] .leaflet-tooltip-top::before { border-top-color: var(--panel); }
+:root[data-theme="dark"] .leaflet-tooltip-bottom::before { border-bottom-color: var(--panel); }
+:root[data-theme="dark"] .leaflet-tooltip-left::before { border-left-color: var(--panel); }
+:root[data-theme="dark"] .leaflet-tooltip-right::before { border-right-color: var(--panel); }

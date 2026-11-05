@@ -29,11 +29,11 @@
   #crumbs .sep { color: var(--muted); margin: 0 4px; }
   #crumbs .here { font-weight: 600; }
   #search { width: 100%; margin-top: 10px; font: inherit; padding: 6px 9px;
-    border: 1px solid var(--line); border-radius: 6px; }
+    border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--ink); }
   #listHead { color: var(--muted); font-size: 12px; margin-top: 8px; }
   #places { list-style: none; margin: 0; padding: 0; overflow-y: auto; flex: 1; }
   #places li { padding: 9px 16px; border-bottom: 1px solid var(--line); cursor: pointer; }
-  #places li:hover { background: #f3f6f4; }
+  #places li:hover { background: var(--row-hover); }
   #places .name { font-weight: 600; }
   #places .meta { color: var(--muted); font-size: 12px; }
   #places .go { float: right; color: var(--muted); }
@@ -47,13 +47,13 @@
   #placeTitle { font-size: 16px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   #placeStats { color: var(--muted); white-space: nowrap; }
   #bar label { margin-left: auto; color: var(--muted); white-space: nowrap; }
-  #bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: #fff; }
+  #bar select { font: inherit; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); color: var(--ink); }
   #map { flex: 1; }
-  .legend { background: rgba(255,255,255,.92); padding: 6px 10px; border-radius: 6px; font-size: 12px;
+  .legend { background: var(--legend-bg); padding: 6px 10px; border-radius: 6px; font-size: 12px;
     line-height: 1.5; box-shadow: 0 1px 4px rgba(0,0,0,.2); max-width: 240px; }
 
   /* Calendar markers */
-  .cal { width: 58px; background: #fff; border: 1px solid rgba(0,0,0,.35); border-radius: 6px;
+  .cal { width: 58px; background: var(--panel); border: 1px solid rgba(0,0,0,.35); border-radius: 6px;
     box-shadow: 0 1px 4px rgba(0,0,0,.35); text-align: center; overflow: hidden; cursor: pointer;
     font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", sans-serif; }
   .cal .top { background: var(--cal); color: #fff; font: 700 11px/1 sans-serif; padding: 4px 2px 3px;
@@ -63,6 +63,8 @@
   .cal.year .top { background: var(--accent); font-size: 13px; padding: 5px 2px 4px; }
   .cal:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,.4); }
 </style>
+<link rel="stylesheet" href="theme.css">
+<script src="theme.js"></script>
 </head>
 <body>
 
