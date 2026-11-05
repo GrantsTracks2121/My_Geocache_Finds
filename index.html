@@ -137,13 +137,15 @@
       (SRC.file ? " · from " + SRC.file + (SRC.generated ? " (Pocket Query of " + prettyDate(SRC.generated).slice(4) + ")" : "") : "");
 
     document.getElementById("date-figures").innerHTML =
-      "<strong>" + num(DAYS.length) + "</strong> caching days · <strong>" + years + "</strong> years<br>" +
+      "<strong>" + num(DAYS.length) + "</strong> caching days<br>" +
+      "<strong>" + years + "</strong> years<br>" +
       "<strong>" + num(finds) + "</strong> finds · " + num(dnfs) + " DNFs";
 
     const countries = new Set(stops.map(s => s.country).filter(Boolean));
     const regions = new Set(stops.filter(s => s.state && s.state !== "None").map(s => s.state + "|" + s.country));
     document.getElementById("place-figures").innerHTML =
-      "<strong>" + countries.size + "</strong> countries · <strong>" + regions.size + "</strong> provinces &amp; states<br>" +
+      "<strong>" + countries.size + "</strong> countries<br>" +
+      "<strong>" + regions.size + "</strong> provinces &amp; states<br>" +
       "<strong>" + num(new Set(stops.filter(s => s.town).map(s => s.state + "|" + s.town)).size) + "</strong> towns";
 
     renderFavorites();
