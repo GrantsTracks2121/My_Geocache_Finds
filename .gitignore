@@ -24,6 +24,11 @@ profile/
 !brasscaps/gpx/*.gpx
 !samples/*.gpx
 
+# Your own brass cap finds (made from your Cacher Stats page in Settings).
+# The cap GPX files in brasscaps/gpx/ are public and shared by everyone.
+brasscaps/brasscaps.json
+brasscaps/stats.html
+
 # GeoNames download and lookup file (large; rebuilt by build_places.py)
 geonames/
 

@@ -11,6 +11,9 @@ Shows the pages in this folder (like `python3 -m http.server`) and also:
     data/days.js so day titles use them
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
     folder and rebuilds data/days.js with build_days.py
+  - reads your Alberta Brass Cap Cache stats page (Settings) with
+    fetch_brasscaps.py and rebuilds data/days.js so brass cap finds are
+    placed at their caps
 
 Usage (from Terminal, in this folder):
     python3 serve.py          # http://localhost:8002/
@@ -29,6 +32,8 @@ import sys
 import threading
 import zipfile
 from functools import partial
+
+import fetch_brasscaps
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import unquote
@@ -143,6 +148,23 @@ def clean_place(p):
         if not (-90 <= place["lat"] <= 90 and -180 <= place["lon"] <= 180 and 0.1 <= place["radiusKm"] <= 100):
             raise ValueError("bad place")
     return place
+
+
+def have_finds():
+    """True once a My Finds file has been loaded."""
+    return any(HERE.glob("*.gpx"))
+
+
+def brasscap_summary():
+    """What the Settings panel shows about the brass cap finds, or {}."""
+    try:
+        data = json.loads(fetch_brasscaps.JSON_PATH.read_text(encoding="utf-8"))
+    except (FileNotFoundError, ValueError):
+        return {}
+    if not isinstance(data, dict) or not data.get("url"):
+        return {}
+    return {"cacher": data.get("cacher", ""), "url": data["url"], "fetched": data.get("fetched", ""),
+            "finds": data.get("finds", 0), "caps": len(data.get("caps", []))}
 
 
 def rebuild_days():
@@ -313,6 +335,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, read_places())
         elif path == "/api/picture":
             self.send_json(200, {k: current_picture(k) for k in PICTURE_KINDS})
+        elif path == "/api/brasscaps":
+            self.send_json(200, brasscap_summary())
         else:
             super().do_GET()
 
@@ -334,6 +358,10 @@ class Handler(SimpleHTTPRequestHandler):
             self.post_places()
         elif path == "/api/picture":
             self.post_picture(picture_kind(self.path))
+        elif path == "/api/brasscaps":
+            self.post_brasscaps()
+        elif path == "/api/brasscaps/remove":
+            self.post_brasscaps(remove=True)
         elif path == "/api/picture/remove":
             kind = picture_kind(self.path)
             for f in PROFILE_DIR.glob(kind + ".*") if PROFILE_DIR.exists() else []:
@@ -386,6 +414,40 @@ class Handler(SimpleHTTPRequestHandler):
                 PLACES_PATH.unlink(missing_ok=True)
             else:
                 PLACES_PATH.write_bytes(old)
+            self.send_json(200, {"ok": False, "error": str(err)})
+        finally:
+            upload_lock.release()
+
+    def post_brasscaps(self, remove=False):
+        """Read the cacher stats page the page sends (or forget it), then
+        rebuild days.js so brass cap finds are placed at their caps."""
+        url = ""
+        if not remove:
+            try:
+                url = str(self.read_body().get("url", ""))
+            except (ValueError, AttributeError):
+                pass
+            if not fetch_brasscaps.stats_url(url):
+                self.send_json(200, {"ok": False, "error": "That isn't a Cacher Stats page address. It should start "
+                                     "with https://brasscap.albertabattlecache.ca/cacherbreakdown/"})
+                return
+        if not upload_lock.acquire(blocking=False):
+            self.send_json(409, {"ok": False, "error": "The data is already being rebuilt. Try again shortly."})
+            return
+        try:
+            if remove:
+                fetch_brasscaps.JSON_PATH.unlink(missing_ok=True)
+                fetch_brasscaps.STATS_PATH.unlink(missing_ok=True)
+                result = {}
+            else:
+                result = fetch_brasscaps.fetch(url, log=lambda *a: print("  brass caps:", *a))
+            rebuilt = False
+            if have_finds():
+                rebuild_days()
+                rebuilt = True
+            self.send_json(200, {"ok": True, "rebuilt": rebuilt, "failed": result.get("failed", 0),
+                                 **brasscap_summary()})
+        except (fetch_brasscaps.FetchError, UploadError) as err:
             self.send_json(200, {"ok": False, "error": str(err)})
         finally:
             upload_lock.release()

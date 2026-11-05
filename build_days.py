@@ -96,7 +96,7 @@ SMILEYS = {
 }
 SMILEYS_LOWER = {k.lower(): v for k, v in SMILEYS.items()}
 SMILEY_RE = re.compile("|".join(re.escape(k) for k in sorted(SMILEYS, key=len, reverse=True)), re.I)
-# "This entry was edited by Coolcat21 on ..." notes, with or without brackets
+# "This entry was edited by <name> on ..." notes, with or without brackets
 EDITED_RE = re.compile(r"\[?This entry was edited by [^\n\]]*\]?", re.I)
 BR_RE = re.compile(r"<br\s*/?>", re.I)
 
@@ -115,18 +115,20 @@ def clean_log(raw):
 # GC43F3 was one listing that pointed at a different survey brass cap every
 # few weeks, so the My Finds file puts every one of its logs at the listing's
 # single location. Each log names its cap ("BCP769 Kinsmen Participark ...");
-# the real cap locations come from brasscaps/brasscaps.json, saved once by
-# fetch_brasscaps.py. Caps the brass cap site no longer lists (archived ones)
-# fall back to the "Posted:" coordinates Grant wrote in his log.
+# the real cap locations come from brasscaps/brasscaps.json, which
+# fetch_brasscaps.py makes from the cacher's stats page on the brass cap site
+# (Settings > Alberta Brass Cap Cache). Caps the site no longer lists
+# (archived ones), or every cap when there's no brasscaps.json, fall back to
+# the "Posted:" coordinates written in the log.
 # ---------------------------------------------------------------------------
 
 BRASS_CAP_CODES = {"GC43F3", "GC72DVJ", "GC9P577"}
 BRASS_CAP_PATH = HERE / "brasscaps" / "brasscaps.json"
 BRASS_CAP_PAGE = "https://brasscap.albertabattlecache.ca/capbreakdown/{}.html"
 BCP_RE = re.compile(r"BCP\s*-?\s*(\d{1,3})([A-Za-z])?(?![\d])")
-# Coordinates Grant wrote in his log: "Posted: N53° 30.378' W112° 57.090'",
+# Coordinates written in a log: "Posted: N53° 30.378' W112° 57.090'",
 # "**Posted:** N50° 55.280' ...", or only "My GPSr: N52 16.077 W113 48.548".
-# The posted coordinates are preferred; his GPS reading is the fallback.
+# The posted coordinates are preferred; the cacher's GPS reading is the fallback.
 COORD_TAIL = r"[*:\s]*N\s*(\d{1,2})\s*[°º\s]\s*(\d{1,2}\.\d+)\s*'?\s*,?\s*W\s*(\d{2,3})\s*[°º\s]\s*(\d{1,2}\.\d+)"
 POSTED_RE = re.compile(r"Posted" + COORD_TAIL, re.I)
 MYGPS_RE = re.compile(r"My\s*GPS\w*" + COORD_TAIL, re.I)
@@ -140,9 +142,12 @@ def brass_caps():
     global _brass_caps
     if _brass_caps is None:
         _brass_caps = {}
-        if BRASS_CAP_PATH.exists():
-            for rec in json.loads(BRASS_CAP_PATH.read_text(encoding="utf-8")):
-                _brass_caps[rec["bcp"].upper()] = rec
+        try:
+            data = json.loads(BRASS_CAP_PATH.read_text(encoding="utf-8"))
+        except (FileNotFoundError, ValueError):
+            data = {}
+        for rec in data.get("caps", []) if isinstance(data, dict) else []:
+            _brass_caps[rec["bcp"].upper()] = rec
     return _brass_caps
 
 
@@ -160,8 +165,7 @@ def place_brass_cap(stop, log_text, log_id):
     stop["bcp"] = cap_id
     brass_seen_log_ids.add(int(log_id))
     # The brass cap site captured some logs before Geocaching.com changed them
-    # (e.g. three 2017-05-19 finds now stored as Write note). Grant chose to
-    # show the type the site recorded.
+    # (e.g. a find later changed to Write note); show the type the site recorded.
     if rec:
         for ml in rec.get("my_logs", []):
             if ml["log_id"] == int(log_id) and ml["type"] and ml["type"] != stop["log"]:
@@ -185,7 +189,7 @@ def place_brass_cap(stop, log_text, log_id):
             brass_learned.setdefault(cap_id, (stop["lat"], stop["lon"], stop["name"]))
         brass_report["by_posted"] += 1
         return stop
-    # Not locatable from this log alone; another of Grant's logs on the same
+    # Not locatable from this log alone; another of the cacher's logs on the same
     # cap may give its coordinates. resolve_brass_caps() settles it at the end.
     stop["_pending"] = (cap_id, log_id)
     return stop
@@ -195,9 +199,8 @@ brass_learned = {}
 
 
 def add_missing_brass_caps():
-    """Grant's brass cap logs that the brass cap site saved but that are
-    no longer in the My Finds file (14 finds from June-July 2017), as a
-    list of (day, stop)."""
+    """The cacher's brass cap logs that the brass cap site saved but that
+    are no longer in the My Finds file, as a list of (day, stop)."""
     added = []
     for cap_id, rec in brass_caps().items():
         for ml in rec.get("my_logs", []):
@@ -241,7 +244,7 @@ def report_brass_caps():
     if not (r["by_archive"] or r["by_posted"] or r["unplaced"]):
         return
     print(f"Brass caps: {r['by_archive']} placed from the brass cap archive, "
-          f"{r['by_posted']} from coordinates written in Grant's logs, "
+          f"{r['by_posted']} from coordinates written in the logs, "
           f"{len(r['unplaced'])} left off the map (location unknown)")
     if r["retyped"]:
         print(f"  {len(r['retyped'])} logs shown with the type the brass cap site recorded: "
@@ -521,7 +524,7 @@ def label_canadian_stop(grid, bounds, muni, lat, lon):
 
 
 # ---------------------------------------------------------------------------
-# My Places (places.json, set on the Dashboard): Grant's own named areas, such
+# My Places (places.json, set on the Dashboard): your own named areas, such
 # as Ministik or Blackfoot, each a circle (centre point and radius) or a
 # rectangle (north, south, east and west edges). A cache inside
 # one is credited to that place instead of the nearest town, in day titles and

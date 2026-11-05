@@ -213,6 +213,31 @@ the boundaries are used automatically.
 
 ---
 
+## 6. Optional: Alberta Brass Cap Cache finds
+
+This is only for cachers who logged the **Alberta Brass Cap Cache** (GC43F3,
+GC72DVJ or GC9P577). That one listing pointed at a different survey brass cap
+every few weeks, so your My Finds file puts all your brass cap logs at the
+listing's one spot. The app can put each find at the brass cap you actually
+found.
+
+1. Open your **Cacher Stats** page on the brass cap site and copy its address
+   from your browser's address bar. It looks like
+   `https://brasscap.albertabattlecache.ca/cacherbreakdown/….html`
+2. On the Dashboard, open **Settings** and scroll to the bottom, to
+   **Alberta Brass Cap Cache**.
+3. Paste the address into the box and click **Load brass caps**.
+
+The app reads your finds from that page and rebuilds your caching days. The
+first time, this can take a few minutes. When it's done, you'll see your caching
+name and how many brass cap finds it read.
+
+Your logs still come from your My Finds file. The brass cap site only supplies
+where each cap is. To pick up brass caps you've found since, click
+**Update brass caps**. To stop using them, click **Remove**.
+
+---
+
 ## What stays on your computer
 
 Everything you add is saved in the app's folder:
@@ -226,6 +251,7 @@ Everything you add is saved in the app's folder:
 | `places.json` | your My Places |
 | `settings.json` | your Dashboard settings |
 | `profile/` | your Dashboard picture and background |
+| `brasscaps/brasscaps.json` | your Alberta Brass Cap Cache finds |
 
 To back up your data, copy these. To move the app to a new folder or computer,
 copy the whole folder.
@@ -261,8 +287,6 @@ Everything else works offline.
 
 - Day titles leave out **Canada** as the "home" country, and name every other
   country. This is fixed in `build_days.py` (`HOME_COUNTRY`) for now.
-- The **Alberta Brass Cap Cache** (GC43F3) support is specific to the app's
-  author's finds. It has no effect on anyone else's data.
 
 ---
 
@@ -272,6 +296,7 @@ Everything else works offline.
 - Place names: [GeoNames](https://www.geonames.org), CC BY 4.0
 - Canadian boundaries: Statistics Canada, 2021 Census Boundary Files,
   Statistics Canada Open Licence
+- Brass cap locations: [Alberta Brass Cap Cache stats](https://brasscap.albertabattlecache.ca)
 - Cache type icons: [c:geo](https://github.com/cgeo/cgeo), Apache License 2.0
 - [Leaflet](https://leafletjs.com) (BSD 2-Clause),
   [marked](https://github.com/markedjs/marked) (MIT),

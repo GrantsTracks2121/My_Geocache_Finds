@@ -137,6 +137,14 @@ details.fold .fold-body > :first-child { margin-top: 0; }
 
 /* My Places (Dashboard settings) */
 .places-panel { margin-top: 12px; }
+.brass-panel { margin-top: 12px; }
+.brass-form { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 12px; }
+.brass-form.busy { opacity: .7; }
+.brass-form input[type=url] { flex: 1 1 320px; min-width: 0; font: inherit; font-size: 14px; color: var(--ink);
+  padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--field); }
+.brass-status { font-size: 13px; margin-top: 8px; min-height: 1em; }
+.brass-status .ok { color: var(--accent); }
+.brass-status .err { color: var(--danger); }
 .place-list { list-style: none; margin: 10px 0 12px; padding: 0; }
 .place-list li { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 8px 10px;
   border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; }

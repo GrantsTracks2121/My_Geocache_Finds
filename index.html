@@ -62,7 +62,7 @@
 </div>
 
 <details class="fold settings-fold" id="settings">
-<summary>Settings <span class="count">Sequence of Daily Finds · Theme · Background · My Places</span></summary>
+<summary>Settings <span class="count">Sequence of Daily Finds · Theme · Background · My Places · Brass Caps</span></summary>
 <div class="fold-body">
 <div class="panel">
   <div class="setting">
@@ -129,6 +129,22 @@
     </form>
     <div id="place-map"></div>
   </div>
+</div>
+
+<div class="panel brass-panel">
+  <div class="setting">
+    <span class="sname">Alberta Brass Cap Cache</span>
+    <span class="sdesc">Only for cachers who logged the Alberta Brass Cap Cache (GC43F3, GC72DVJ or GC9P577).
+      Your My Finds file puts all those logs at the cache's one listed spot. Paste the address of your
+      Cacher Stats page from the brass cap site, and each find is placed at the brass cap you actually found.</span>
+  </div>
+  <form class="brass-form" id="brass-form" autocomplete="off">
+    <input type="url" id="brass-url" placeholder="https://brasscap.albertabattlecache.ca/cacherbreakdown/….html"
+      aria-label="Cacher Stats page address" spellcheck="false">
+    <button class="btn small" type="submit" id="brass-load">Load brass caps</button>
+    <button class="btn danger small" type="button" id="brass-remove" hidden>Remove</button>
+  </form>
+  <div class="brass-status" id="brass-status"></div>
 </div>
 </div><!-- .fold-body -->
 </details>
@@ -357,6 +373,88 @@
   loadFavorites();
   loadSettings();
   loadTrips();
+})();
+</script>
+<script>
+// ---------- Alberta Brass Cap Cache (Settings) ----------
+(function () {
+  "use strict";
+  const served = location.protocol.startsWith("http");
+  const form = document.getElementById("brass-form");
+  const urlEl = document.getElementById("brass-url");
+  const loadBtn = document.getElementById("brass-load");
+  const removeBtn = document.getElementById("brass-remove");
+  const status = document.getElementById("brass-status");
+  const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const STATS_RE = /^(https?:\/\/)?brasscap\.albertabattlecache\.ca\/cacherbreakdown\/[0-9a-f-]{36}\.html$/i;
+
+  function show(j) {
+    const have = !!(j && j.url);
+    removeBtn.hidden = !have;
+    loadBtn.textContent = have ? "Update brass caps" : "Load brass caps";
+    if (have) {
+      urlEl.value = j.url;
+      status.innerHTML = '<span class="ok">✓</span> ' + esc(j.cacher) + ": " + j.finds.toLocaleString("en-CA") +
+        " brass cap finds" + (j.fetched ? ", read " + esc(j.fetched) : "") + ".";
+    } else {
+      status.textContent = "";
+    }
+  }
+
+  function setBusy(on) {
+    form.classList.toggle("busy", on);
+    [urlEl, loadBtn, removeBtn].forEach(el => el.disabled = on);
+  }
+
+  async function post(path, body) {
+    const resp = await fetch(path, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {})
+    });
+    return resp.json();
+  }
+
+  async function after(j) {
+    if (!j.ok) { status.innerHTML = '<span class="err">✗ ' + esc(j.error || "Something went wrong.") + "</span>"; return; }
+    show(j);
+    if (j.url && !j.rebuilt) status.innerHTML += " They'll be used when you load your My Finds file.";
+    if (j.failed) status.innerHTML += ' <span class="err">' + j.failed + " caps couldn't be downloaded; click Update to try again.</span>";
+    if (j.rebuilt && window.refreshDashboard) await window.refreshDashboard();
+  }
+
+  form.addEventListener("submit", async e => {
+    e.preventDefault();
+    const url = urlEl.value.trim();
+    if (!served) { status.textContent = "Start serve.py to load brass caps."; return; }
+    if (!STATS_RE.test(url)) {
+      status.innerHTML = '<span class="err">✗ That isn\'t a Cacher Stats page address. It should start with ' +
+        "https://brasscap.albertabattlecache.ca/cacherbreakdown/</span>";
+      return;
+    }
+    setBusy(true);
+    status.textContent = "Reading your brass cap finds and rebuilding your caching days… " +
+      "The first time, this can take a few minutes.";
+    try { await after(await post("api/brasscaps", { url })); }
+    catch (err) { status.innerHTML = '<span class="err">✗ Could not reach the server. Is serve.py running?</span>'; }
+    setBusy(false);
+  });
+
+  removeBtn.addEventListener("click", async () => {
+    if (!confirm("Stop placing brass cap finds at their caps? Your caching days are rebuilt without them.")) return;
+    setBusy(true);
+    status.textContent = "Rebuilding your caching days…";
+    try {
+      const j = await post("api/brasscaps/remove");
+      if (j.ok) urlEl.value = "";
+      await after(j);
+    } catch (err) { status.innerHTML = '<span class="err">✗ Could not reach the server. Is serve.py running?</span>'; }
+    setBusy(false);
+  });
+
+  if (served) {
+    fetch("api/brasscaps", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).then(show).catch(() => {});
+  } else {
+    [urlEl, loadBtn].forEach(el => el.disabled = true);
+  }
 })();
 </script>
 <script>
