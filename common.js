@@ -68,6 +68,31 @@ window.Finds = (function () {
 
   function plural(n, word) { return n.toLocaleString("en-CA") + " " + word + (n === 1 ? "" : "s"); }
 
+  // If the pages are shown by a plain web server (such as `python3 -m http.server`)
+  // instead of serve.py, trips, favourites, places and settings can't load and the
+  // pages look empty. Say so plainly at the top of every page, so it isn't
+  // mistaken for lost data.
+  function checkServer() {
+    if (!location.protocol.startsWith("http")) return;   // opened as a file: pages say so themselves
+    fetch("api/settings", { cache: "no-store" })
+      .then(r => r.ok && (r.headers.get("Content-Type") || "").includes("json"))
+      .catch(() => false)
+      .then(ok => {
+        if (ok || document.getElementById("server-warning")) return;
+        const bar = document.createElement("div");
+        bar.id = "server-warning";
+        bar.setAttribute("role", "alert");
+        bar.style.cssText = "position:sticky;top:0;z-index:10000;background:#fde68a;color:#3b2f00;" +
+          "border-bottom:2px solid #d97706;padding:10px 16px;font:14px/1.4 -apple-system,system-ui,sans-serif;";
+        bar.innerHTML = "<strong>Your trips, favourites and places aren't showing because this isn't serve.py.</strong> " +
+          "They're safe in this folder. In Terminal, stop the current server with Control-C, then run " +
+          "<code style=\"background:rgba(0,0,0,.08);padding:1px 5px;border-radius:4px\">python3 serve.py</code> " +
+          "and refresh this page.";
+        document.body.prepend(bar);
+      });
+  }
+  if (document.body) checkServer(); else document.addEventListener("DOMContentLoaded", checkServer);
+
   return { MONTHS, WEEKDAYS, esc, prettyDate, dateRange, daySpan, region, regionsText, tripDays, plural,
     PLACE_LEVELS, placeValue, inPlace };
 })();
