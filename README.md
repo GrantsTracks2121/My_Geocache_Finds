@@ -8,7 +8,7 @@ into caching days you can explore on a map:
   province or state and town
 - **Trips**: name a date range and see its caching days together
 - **Favourites**: star the days, trips and caches you like best
-- **My Places**: name your own areas (a park, a cabin, a neighbourhood) so
+- **My Places**: name your own areas (a park, a neighbourhood, a hiking area) so
   day titles use them
 
 It runs entirely on your own computer. Your finds, trips and notes stay in
