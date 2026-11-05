@@ -1,6 +1,6 @@
 # My Geocache Finds
 
-A personal web app that turns your Geocaching.com **My Finds** Pocket Query
+A personal web app that turns your Geocaching.com "**My Finds**" Pocket Query
 into caching days you can explore on a map:
 
 - **Day Replay**: replay any caching day, find by find, on a map, with your logs
