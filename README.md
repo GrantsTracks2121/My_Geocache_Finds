@@ -73,9 +73,7 @@ If it's missing, install it with your package manager, for example
 
 ## 2. Get the app
 
-The app is kept on **GitHub**, a website where people share software. You
-don't need a GitHub account or any GitHub know-how. You download the app as
-one zip file, the same way you'd download any file, and unzip it into a folder.
+You download the app as one zip file, the same way you'd download any file, and unzip it into a folder.
 
 ### Download the zip file
 
