@@ -4,9 +4,10 @@ Geocache Day Replay - place-name lookup builder.
 
 Downloads the GeoNames "allCountries" file (about 400 MB) if it isn't already
 in the geonames/ folder, then extracts every populated place in the world
-(cities, towns, villages, hamlets and city neighbourhoods) into a compact
-lookup file, geonames/places.tsv.gz, which build_days.py uses to name each
-caching day.
+(cities, towns, villages, hamlets and city neighbourhoods), with each
+place's time zone, into a compact lookup file, geonames/places.tsv.gz.
+build_days.py uses it to name each caching day and to put each find on
+the right day in local time.
 
 Run it once. Run it again only if you want fresher GeoNames data.
 Uses only the Python standard library.
@@ -61,7 +62,7 @@ def extract():
     with zipfile.ZipFile(ZIP_PATH) as z, z.open("allCountries.txt") as raw, \
             gzip.open(OUT_PATH, "wt", encoding="utf-8", compresslevel=6) as out:
         out.write("# Place names from GeoNames (geonames.org), CC BY 4.0\n")
-        out.write("# name\tlat\tlon\tfeature_code\tcountry_code\tpopulation\n")
+        out.write("# name\tlat\tlon\tfeature_code\tcountry_code\tpopulation\ttimezone\n")
         for line in io.TextIOWrapper(raw, encoding="utf-8"):
             cols = line.rstrip("\n").split("\t")
             if len(cols) < 15 or cols[6] != "P" or cols[7] in SKIP_CODES:
@@ -73,6 +74,7 @@ def extract():
                 cols[7],
                 cols[8],
                 cols[14] or "0",
+                cols[17] if len(cols) > 17 else "",   # time zone, e.g. America/Edmonton
             )) + "\n")
             kept += 1
             if kept % 500000 == 0:

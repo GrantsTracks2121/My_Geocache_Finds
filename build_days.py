@@ -23,7 +23,7 @@ import xml.etree.ElementTree as ET
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError, available_timezones
 
 HERE = Path(__file__).resolve().parent
 GPX_NS = "{http://www.topografix.com/GPX/1/0}"
@@ -32,11 +32,23 @@ GS_NS = "{http://www.groundspeak.com/cache/1/0/1}"
 # Log types that count as a stop on the day's route
 STOP_TYPES = {"Found it", "Didn't find it", "Attended", "Webcam Photo Taken", "Write note"}
 
-# Logs with a real time are stored in UTC. Convert them to local time so an
-# evening find stays on the right day: Edmonton time for the Americas,
-# Central European time for anything east of the mid-Atlantic.
-AMERICAS_TZ = ZoneInfo("America/Edmonton")
-EUROPE_TZ = ZoneInfo("Europe/Paris")
+# Logs with a real time are stored in UTC. Each one is converted to the local
+# time where the cache is, so an evening find stays on the right day. The time
+# zone comes from the nearest GeoNames place (geonames/places.tsv.gz); with no
+# place nearby, or no time zone data, this computer's own time zone is used.
+_zones = {}                 # time zone name -> ZoneInfo, or None if unavailable
+missing_tz_data = False     # True if this computer has no time zone database
+
+
+def zone_named(name):
+    global missing_tz_data
+    if name not in _zones:
+        try:
+            _zones[name] = ZoneInfo(name)
+        except (ZoneInfoNotFoundError, ValueError):
+            _zones[name] = None
+            missing_tz_data = missing_tz_data or not available_timezones()
+    return _zones[name]
 
 
 def pick_gpx():
@@ -48,14 +60,14 @@ def pick_gpx():
     return files[-1]
 
 
-def log_day(stamp, lon):
+def log_day(stamp, local_tz=None):
     """Return the caching day (YYYY-MM-DD) for a log date.
 
     Geocaching.com stores many log dates as a bare date shown as 19:00 or
     20:00 UTC; for those the date part is the day. Logs made from an app
-    carry a real UTC time; those are converted to local time first.
+    carry a real UTC time; those are converted to local time first, in
+    local_tz (or this computer's time zone when it is None).
     """
-    local_tz = EUROPE_TZ if lon > -30 else AMERICAS_TZ
     stamp = stamp.strip()
     date_part, _, time_part = stamp.partition("T")
     if time_part.startswith(("19:00:00", "20:00:00")) or not time_part:
@@ -182,9 +194,11 @@ def place_brass_cap(stop, log_text, log_id):
 brass_learned = {}
 
 
-def add_missing_brass_caps(days):
-    """Add Grant's brass cap logs that the brass cap site saved but that are
-    no longer in the My Finds file (14 finds from June-July 2017)."""
+def add_missing_brass_caps():
+    """Grant's brass cap logs that the brass cap site saved but that are
+    no longer in the My Finds file (14 finds from June-July 2017), as a
+    list of (day, stop)."""
+    added = []
     for cap_id, rec in brass_caps().items():
         for ml in rec.get("my_logs", []):
             if ml["log_id"] in brass_seen_log_ids or ml["type"] not in STOP_TYPES:
@@ -196,32 +210,30 @@ def add_missing_brass_caps(days):
                 "log": ml["type"], "logId": ml["log_id"], "bcp": cap_id,
                 "url": BRASS_CAP_PAGE.format(cap_id), "source": "brass cap archive",
             }
-            days[ml["date"]].append(stop)
+            added.append((ml["date"], stop))
             brass_seen_log_ids.add(ml["log_id"])
             brass_report["added"].append((cap_id, ml["date"], ml["type"]))
+    return added
 
 
-def resolve_brass_caps(days):
+def resolve_brass_caps(stops):
     """Place pending brass cap logs using coordinates learned from other logs
     on the same cap; drop the ones that still can't be located."""
-    for day, stops in days.items():
-        keep = []
-        for s in stops:
-            pending = s.pop("_pending", None)
-            if pending is None:
-                keep.append(s)
-                continue
-            cap_id, log_id = pending
-            if cap_id in brass_learned:
-                s["lat"], s["lon"], s["name"] = brass_learned[cap_id]
-                s["url"] = BRASS_CAP_PAGE.format(cap_id)
-                brass_report["by_posted"] += 1
-                keep.append(s)
-            else:
-                brass_report["unplaced"].append((s["log"], cap_id or "no BCP number", log_id))
-        stops[:] = keep
-    for day in [d for d, v in days.items() if not v]:
-        del days[day]
+    keep = []
+    for s in stops:
+        pending = s.pop("_pending", None)
+        if pending is None:
+            keep.append(s)
+            continue
+        cap_id, log_id = pending
+        if cap_id in brass_learned:
+            s["lat"], s["lon"], s["name"] = brass_learned[cap_id]
+            s["url"] = BRASS_CAP_PAGE.format(cap_id)
+            brass_report["by_posted"] += 1
+            keep.append(s)
+        else:
+            brass_report["unplaced"].append((s["log"], cap_id or "no BCP number", log_id))
+    return keep
 
 
 def report_brass_caps():
@@ -272,7 +284,11 @@ def reach_km(pop):
 
 
 def load_places(stops):
-    """Load only the places in grid cells around the stops."""
+    """Load only the places in grid cells around the stops.
+
+    Returns (grid, zones): grid holds each cell's places for naming, and
+    zones each cell's (lat, lon, time zone name) for local times. A places
+    file made before time zones were added gives no zones."""
     wanted = set()
     for s in stops:
         cy, cx = cell_of(s["lat"], s["lon"])
@@ -280,16 +296,33 @@ def load_places(stops):
             for dx in range(-SEARCH_CELLS, SEARCH_CELLS + 1):
                 wanted.add((cy + dy, cx + dx))
     grid = defaultdict(list)
+    zones = defaultdict(list)
     with gzip.open(PLACES_PATH, "rt", encoding="utf-8") as f:
         for line in f:
             if line.startswith("#"):
                 continue
-            name, lat, lon, code, _cc, pop = line.rstrip("\n").split("\t")
+            cols = line.rstrip("\n").split("\t")
+            name, lat, lon, code, _cc, pop = cols[:6]
             lat, lon = float(lat), float(lon)
             key = cell_of(lat, lon)
             if key in wanted:
                 grid[key].append((name, lat, lon, code, int(pop or 0)))
-    return grid
+                if len(cols) > 6 and cols[6]:
+                    zones[key].append((lat, lon, cols[6]))
+    return grid, zones
+
+
+def zone_at(zones, lat, lon):
+    """The time zone of the nearest place to a stop, or None (this computer's)."""
+    cy, cx = cell_of(lat, lon)
+    best, best_d = None, None
+    for dy in range(-SEARCH_CELLS, SEARCH_CELLS + 1):
+        for dx in range(-SEARCH_CELLS, SEARCH_CELLS + 1):
+            for plat, plon, tz in zones.get((cy + dy, cx + dx), ()):
+                d = km_between(lat, lon, plat, plon)
+                if best_d is None or d < best_d:
+                    best, best_d = tz, d
+    return zone_named(best) if best else None
 
 
 # ---------------------------------------------------------------------------
@@ -607,7 +640,7 @@ def main():
     print("Reading", gpx.name, "...")
     root = ET.parse(gpx).getroot()
 
-    days = defaultdict(list)
+    stops = []
     for wpt in root.iter(GPX_NS + "wpt"):
         cache = wpt.find(GS_NS + "cache")
         if cache is None:
@@ -638,15 +671,37 @@ def main():
             stop["text"] = clean_log(text(log, "text"))
             if base["code"] in BRASS_CAP_CODES:
                 stop = place_brass_cap(stop, text(log, "text"), log.get("id"))
-            days[log_day(text(log, "date"), stop["lon"])].append(stop)
-    resolve_brass_caps(days)
-    add_missing_brass_caps(days)
+            stop["_stamp"] = text(log, "date")
+            stops.append(stop)
+    stops = resolve_brass_caps(stops)
+    extra = add_missing_brass_caps()
     report_brass_caps()
 
-    all_stops = [s for v in days.values() for s in v]
+    all_stops = stops + [s for _, s in extra]
+    grid, zones = (load_places(all_stops) if PLACES_PATH.exists() else ({}, {}))
+
+    # Put each log on its day, in local time where the cache is
+    days = defaultdict(list)
+    local_guess = 0
+    for s in stops:
+        tz = zone_at(zones, s["lat"], s["lon"])
+        local_guess += tz is None
+        days[log_day(s.pop("_stamp"), tz)].append(s)
+    for day, s in extra:
+        days[day].append(s)
+    if missing_tz_data:
+        print("This computer has no time zone data, so finds use this computer's own time zone.\n"
+              "  For each find's local time, install it and build again:\n"
+              "    py -m pip install tzdata          (Windows)\n"
+              "    python3 -m pip install tzdata     (Mac or Linux)")
+    elif zones and local_guess:
+        print(f"Time zones: {local_guess} logs with no place nearby use this computer's time zone")
+    elif not zones and PLACES_PATH.exists():
+        print("The place-name file has no time zones (run build_places.py again); "
+              "finds use this computer's time zone.")
+
     if PLACES_PATH.exists():
         print("Looking up place names ...")
-        grid = load_places(all_stops)
         bounds = None
         if BOUNDARY_PATH.exists():
             print("Loading Canadian municipal boundaries ...")
