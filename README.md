@@ -73,11 +73,68 @@ If it's missing, install it with your package manager, for example
 
 ## 2. Get the app
 
-Download the app as a zip file (on GitHub: **Code ▸ Download ZIP**) and unzip
-it wherever you like, for example in your Documents folder. The unzipped
-folder is the app: everything it saves goes in this folder too.
+The app is kept on **GitHub**, a website where people share software. You
+don't need a GitHub account or any GitHub know-how. You download the app as
+one zip file, the same way you'd download any file, and unzip it into a folder.
 
-If you use git, you can clone it instead:
+### Download the zip file
+
+1. Go to the app's page on GitHub:
+   **<https://github.com/GrantsTracks2121/My_Geocache_Finds>**
+   (If you're reading this on GitHub, you're already there: scroll back to
+   the top of the page.)
+2. Above the list of files, click the green **Code** button.
+
+   ![The green Code button, above the list of files](docs/images/github-code-button.png)
+
+3. A menu opens. Click **Download ZIP** at the bottom of it. You can ignore
+   everything else in the menu.
+
+   ![The Code menu, with Download ZIP at the bottom](docs/images/github-download-zip.png)
+
+4. Your browser saves a file named **My_Geocache_Finds-main.zip**, usually in
+   your **Downloads** folder.
+
+### Unzip it into a folder
+
+The zip file holds one folder, **My_Geocache_Finds-main**. That folder is the
+app. Put it somewhere you'll find it again, such as your **Documents** folder.
+Everything the app saves (your trips, favourites and so on) goes in this
+folder too.
+
+**Windows 10 or 11**
+
+1. Open **File Explorer** and go to your **Downloads** folder.
+2. Right-click **My_Geocache_Finds-main.zip** and choose **Extract All…**
+3. In the window that opens, click **Browse…**, choose your **Documents**
+   folder, and click **Select Folder**.
+4. Click **Extract**. The folder **My_Geocache_Finds-main** is now in Documents.
+
+**macOS**
+
+1. Open **Finder** and go to your **Downloads** folder.
+2. Double-click **My_Geocache_Finds-main.zip**. A folder named
+   **My_Geocache_Finds-main** appears next to it. (Safari sometimes does this
+   for you, so the folder may already be there.)
+3. Drag the **My_Geocache_Finds-main** folder into your **Documents** folder.
+
+**Linux**
+
+1. Open your file manager and go to your **Downloads** folder.
+2. Right-click **My_Geocache_Finds-main.zip** and choose **Extract Here**.
+3. Move the **My_Geocache_Finds-main** folder into your **Documents** folder.
+
+Or, in a terminal: `unzip ~/Downloads/My_Geocache_Finds-main.zip -d ~/Documents`
+
+**Check:** open the **My_Geocache_Finds-main** folder. You should see files
+such as `serve.py`, `index.html` and `README.md` straight away. If instead you
+see another folder with the same name, open that one: that's the app's folder.
+
+You can rename the folder if you like, for example to **My Geocache Finds**.
+
+### If you use git
+
+You can clone the app instead of downloading the zip:
 ```
 git clone https://github.com/GrantsTracks2121/My_Geocache_Finds.git
 ```
