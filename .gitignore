@@ -12,6 +12,14 @@ __pycache__/
 *.gpx
 data/
 
+# Your own trips, favourites, places, settings and Dashboard pictures.
+# serve.py starts each one empty when it is missing, so a new user starts fresh.
+trips.json
+favorites.json
+places.json
+settings.json
+profile/
+
 # Exceptions: the public brass cap GPX files, and test samples
 !brasscaps/gpx/*.gpx
 !samples/*.gpx

@@ -281,6 +281,12 @@ def take_finds_upload(filename, tmp):
 
 
 class Handler(SimpleHTTPRequestHandler):
+    def guess_type(self, path):
+        # LICENSE has no extension; show it in the browser instead of downloading it
+        if Path(path).name == "LICENSE":
+            return "text/plain; charset=utf-8"
+        return super().guess_type(path)
+
     def send_json(self, status, payload):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(status)
