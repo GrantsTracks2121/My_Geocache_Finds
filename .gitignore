@@ -27,8 +27,10 @@ profile/
 # GeoNames download and lookup file (large; rebuilt by build_places.py)
 geonames/
 
-# Statistics Canada boundary download and lookup file (large; rebuilt by build_boundaries.py)
-boundaries/
+# Statistics Canada boundary download (large). The lookup file made from it,
+# boundaries/csd.tsv.gz, is small enough to ship with the app.
+boundaries/*
+!boundaries/csd.tsv.gz
 
 # Temporary files while loading a dropped My Finds file (serve.py)
 .upload.tmp

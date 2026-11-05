@@ -8,8 +8,10 @@ compact lookup file, boundaries/csd.tsv.gz, which build_days.py uses so a
 cache is credited to the municipality it is really in. Without it, a cache
 in Sherwood Park could be called Edmonton just because Edmonton is big.
 
-The boundary file has to be downloaded by hand, because the Statistics
-Canada website blocks automatic downloads:
+The app comes with boundaries/csd.tsv.gz already built, so users never need
+to run this. It is only for rebuilding that file, for example from a newer
+census. The boundary file has to be downloaded by hand, because the
+Statistics Canada website blocks automatic downloads:
 
     https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lcsd000b21a_e.zip
     (Cartographic Boundary Files, Census subdivisions, Shapefile)
@@ -18,7 +20,8 @@ Put lcsd000b21a_e.zip in the boundaries/ folder (no need to unzip it), then:
 
     python3 build_boundaries.py
 
-Run it once. Uses only the Python standard library.
+Borders are simplified to within 10 m so the file stays small enough to
+ship with the app. Uses only the Python standard library.
 
 Boundaries: Statistics Canada, 2021 Census Boundary Files, reproduced and
 distributed on an "as is" basis with the permission of Statistics Canada
@@ -40,9 +43,12 @@ ZIP_PATH = BOUND_DIR / "lcsd000b21a_e.zip"
 OUT_PATH = BOUND_DIR / "csd.tsv.gz"
 STEM = "lcsd000b21a_e"
 
-# Drop boundary points closer than this to the previous kept point (metres).
-# Keeps the file small; 25 m is far finer than needed to place a cache.
-KEEP_EVERY_M = 25.0
+# Simplify each boundary so it stays within this many metres of the real one
+# (Douglas-Peucker). Long straight borders shrink to their two ends, which
+# keeps the file small enough to ship with the app; 10 m is far finer than
+# needed to tell which town a cache is in.
+SIMPLIFY_M = 10.0
+DECIMALS = 4                # about 10 m
 
 # --- NAD83 Statistics Canada Lambert (from the .prj file) -------------------
 A = 6378137.0
@@ -128,14 +134,37 @@ def read_polygons(f):
         yield rings
 
 
+def _offset2(p, a, b):
+    """Squared distance (metres) from point p to the segment a-b."""
+    (px, py), (ax, ay), (bx, by) = p, a, b
+    dx, dy = bx - ax, by - ay
+    seg2 = dx * dx + dy * dy
+    t = 0.0 if seg2 == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg2))
+    ex, ey = ax + t * dx - px, ay + t * dy - py
+    return ex * ex + ey * ey
+
+
 def thin(ring):
-    kept = [ring[0]]
-    for x, y in ring[1:-1]:
-        px, py = kept[-1]
-        if (x - px) ** 2 + (y - py) ** 2 >= KEEP_EVERY_M ** 2:
-            kept.append((x, y))
-    kept.append(ring[-1])
-    return kept
+    """Douglas-Peucker simplification of a closed ring, to within SIMPLIFY_M."""
+    if len(ring) < 5:
+        return ring
+    tol2 = SIMPLIFY_M ** 2
+    keep = bytearray(len(ring))
+    keep[0] = keep[-1] = 1
+    stack = [(0, len(ring) - 1)]
+    while stack:
+        i, j = stack.pop()
+        far, far_d = None, tol2
+        a, b = ring[i], ring[j]
+        for k in range(i + 1, j):
+            d = _offset2(ring[k], a, b)
+            if d > far_d:
+                far, far_d = k, d
+        if far is not None:
+            keep[far] = 1
+            stack.append((i, far))
+            stack.append((far, j))
+    return [p for p, k in zip(ring, keep) if k]
 
 
 def main():
@@ -160,7 +189,7 @@ def main():
                     ll = []
                     for x, y in ring:
                         lat, lon = to_lat_lon(x, y)
-                        ll.append([round(lon, 5), round(lat, 5)])
+                        ll.append([round(lon, DECIMALS), round(lat, DECIMALS)])
                     ll_rings.append(ll)
                     points += len(ll)
                 if not ll_rings:

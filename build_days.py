@@ -707,7 +707,7 @@ def main():
             print("Loading Canadian municipal boundaries ...")
             bounds = Boundaries(all_stops)
         else:
-            print("No boundary file yet (run build_boundaries.py); Canadian places will be guessed from town size.")
+            print("No Canadian boundary file (boundaries/csd.tsv.gz); Canadian places will be guessed from town size.")
         memo = {}
         for s in all_stops:
             key = (s["lat"], s["lon"])

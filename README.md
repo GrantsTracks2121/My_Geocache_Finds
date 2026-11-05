@@ -203,19 +203,13 @@ This downloads the GeoNames list of the world's towns (about 400 MB) and builds
 a lookup file from it. It only needs to be done once. Then load your My Finds
 file again (step 4) so the titles use the town names.
 
-### Canada only: city and county limits
+### Canada: city and county limits are built in
 
-For finds in Canada, the app can use Statistics Canada's municipal boundaries
-so a cache is credited to the town it is really in. For example, a cache in
-Sherwood Park is credited to Sherwood Park, not to nearby Edmonton.
-The file has to be downloaded by hand:
-
-1. Download **lcsd000b21a_e.zip** (Census subdivisions, Shapefile, about 160 MB):
-   <https://www12.statcan.gc.ca/census-recensement/2021/geo/sip-pis/boundary-limites/files-fichiers/lcsd000b21a_e.zip>
-2. Put it in the `boundaries` folder inside the app's folder (create the folder
-   if it isn't there). Don't unzip it.
-3. Run `py build_boundaries.py` (Windows) or `python3 build_boundaries.py`
-   (macOS, Linux), then load your My Finds file again.
+For finds in Canada, the app comes with Statistics Canada's municipal
+boundaries, so a cache is credited to the town it is really in. For example, a
+cache in Sherwood Park is credited to Sherwood Park, not to nearby Edmonton.
+There's nothing extra to download: once you've built the town names above,
+the boundaries are used automatically.
 
 ---
 
