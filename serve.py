@@ -3,9 +3,10 @@
 My Geocache Finds - local web server.
 
 Shows the pages in this folder (like `python3 -m http.server`) and also:
-  - saves your favourite days and trips to favorites.json
+  - saves your favourite days, trips and caches to favorites.json
   - saves site-wide settings to settings.json
   - saves your trips (a name and a date range) to trips.json
+  - saves the Dashboard picture to profile/picture.*
   - saves My Places (your own named areas) to places.json and rebuilds
     data/days.js so day titles use them
   - takes a My Finds Pocket Query dropped on the Dashboard, saves it in this
@@ -74,6 +75,7 @@ def read_favorites():
         data = {}
     data.setdefault("days", [])
     data.setdefault("trips", [])
+    data.setdefault("caches", [])      # log ids of favourite cache finds
     return data
 
 
@@ -121,19 +123,23 @@ def read_places():
 
 
 def clean_place(p):
-    """One of My Places from the page, checked: id, name, lat, lon, radiusKm."""
+    """One of My Places from the page, checked: id, name, and either a circle
+    (lat, lon, radiusKm) or a rectangle (shape "rect": north, south, east, west)."""
     if not isinstance(p, dict):
         raise ValueError("bad place")
-    place = {
-        "id": str(p.get("id", "")),
-        "name": str(p.get("name", "")).strip()[:80],
-        "lat": round(float(p.get("lat")), 6),
-        "lon": round(float(p.get("lon")), 6),
-        "radiusKm": round(float(p.get("radiusKm")), 2),
-    }
-    if not (TRIP_ID_RE.match(place["id"]) and place["name"] and -90 <= place["lat"] <= 90
-            and -180 <= place["lon"] <= 180 and 0.1 <= place["radiusKm"] <= 100):
+    place = {"id": str(p.get("id", "")), "name": str(p.get("name", "")).strip()[:80]}
+    if not (TRIP_ID_RE.match(place["id"]) and place["name"]):
         raise ValueError("bad place")
+    if p.get("shape") == "rect":
+        n, s, e, w = (round(float(p.get(k)), 6) for k in ("north", "south", "east", "west"))
+        if not (-90 <= s < n <= 90 and -180 <= w < e <= 180 and n - s <= 3 and e - w <= 5):
+            raise ValueError("bad place")
+        place.update(shape="rect", north=n, south=s, east=e, west=w)
+    else:
+        place.update(shape="circle", lat=round(float(p.get("lat")), 6), lon=round(float(p.get("lon")), 6),
+                     radiusKm=round(float(p.get("radiusKm")), 2))
+        if not (-90 <= place["lat"] <= 90 and -180 <= place["lon"] <= 180 and 0.1 <= place["radiusKm"] <= 100):
+            raise ValueError("bad place")
     return place
 
 
@@ -155,6 +161,30 @@ def rebuild_days():
         raise UploadError(str(err) if isinstance(err, UploadError) else "Rebuilding took too long.")
     prev_days.unlink(missing_ok=True)
     return int(m.group(1)), int(m.group(2))
+
+
+PROFILE_DIR = HERE / "profile"
+PICTURE_TYPES = {b"\x89PNG": ".png", b"\xff\xd8\xff": ".jpg", b"GIF8": ".gif"}
+MAX_PICTURE = 15 * 1024 * 1024
+
+
+def current_picture():
+    """The Dashboard picture's address, or None."""
+    for f in sorted(PROFILE_DIR.glob("picture.*")) if PROFILE_DIR.exists() else []:
+        return f"profile/{f.name}?v={int(f.stat().st_mtime)}"
+    return None
+
+
+def picture_type(data):
+    for magic, ext in PICTURE_TYPES.items():
+        if data.startswith(magic):
+            return ext
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return ".webp"
+    if data[4:12] in (b"ftypheic", b"ftypheix", b"ftypmif1"):
+        raise UploadError("HEIC photos (from an iPhone) can't be shown in a browser. "
+                          "Please use a JPEG or PNG copy of the picture.")
+    return None
 
 
 def count_logs(days_js):
@@ -264,6 +294,8 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_json(200, read_trips())
         elif path == "/api/places":
             self.send_json(200, read_places())
+        elif path == "/api/picture":
+            self.send_json(200, {"picture": current_picture()})
         else:
             super().do_GET()
 
@@ -283,8 +315,34 @@ class Handler(SimpleHTTPRequestHandler):
             self.post_trips()
         elif path == "/api/places":
             self.post_places()
+        elif path == "/api/picture":
+            self.post_picture()
+        elif path == "/api/picture/remove":
+            for f in PROFILE_DIR.glob("picture.*") if PROFILE_DIR.exists() else []:
+                f.unlink()
+            self.send_json(200, {"ok": True, "picture": None})
         else:
             self.send_json(404, {"error": "not found"})
+
+    def post_picture(self):
+        """Save the Dashboard picture (PNG, JPEG, GIF or WebP) as profile/picture.*"""
+        length = int(self.headers.get("Content-Length", 0))
+        if length <= 0 or length > MAX_PICTURE:
+            self.send_json(200, {"ok": False, "error": "That picture is empty or larger than 15 MB."})
+            return
+        data = self.rfile.read(length)
+        try:
+            ext = picture_type(data)
+            if not ext:
+                raise UploadError("Please choose a PNG, JPEG, GIF or WebP picture.")
+        except UploadError as err:
+            self.send_json(200, {"ok": False, "error": str(err)})
+            return
+        PROFILE_DIR.mkdir(exist_ok=True)
+        for f in PROFILE_DIR.glob("picture.*"):
+            f.unlink()
+        (PROFILE_DIR / ("picture" + ext)).write_bytes(data)
+        self.send_json(200, {"ok": True, "picture": current_picture()})
 
     def post_places(self):
         """Replace My Places with the list the page sends, then rebuild days.js
@@ -342,7 +400,7 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_json(200, settings)
 
     def post_favorites(self):
-        """Replace the favourite days and/or favourite trips the page sends;
+        """Replace the favourite days, trips and/or caches the page sends;
         whichever list isn't sent is kept as it was."""
         try:
             incoming = self.read_body()
@@ -352,6 +410,9 @@ class Handler(SimpleHTTPRequestHandler):
                                       reverse=True)
             if "trips" in incoming:
                 data["trips"] = sorted({i for i in incoming["trips"] if isinstance(i, str) and TRIP_ID_RE.match(i)})
+            if "caches" in incoming:
+                data["caches"] = sorted({int(i) for i in incoming["caches"]
+                                         if isinstance(i, int) and not isinstance(i, bool) and i > 0})
         except (ValueError, AttributeError, TypeError):
             self.send_json(400, {"error": "bad favourites data"})
             return

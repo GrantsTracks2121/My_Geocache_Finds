@@ -171,7 +171,22 @@
     background: none; border: none; border-radius: 6px; cursor: pointer;
   }
   #panel .close:hover { background: #eee; color: var(--ink); }
-  #panel h2 { font-size: 17px; margin: 0 30px 8px 0; line-height: 1.3; }
+  #panel h2 { font-size: 17px; margin: 0 64px 8px 0; line-height: 1.3; }
+  #panel .cstar {
+    position: absolute; top: 10px; right: 44px;
+    width: 30px; height: 30px; padding: 0;
+    font: 22px/1 sans-serif; color: #b8b2a6;
+    background: none; border: none; border-radius: 6px; cursor: pointer;
+  }
+  #panel .cstar:hover:not(:disabled) { background: #eee; }
+  #panel .cstar.on { color: #e3a008; }
+  #panel .cstar:disabled { opacity: .35; cursor: default; }
+  /* Favourite cache: small gold star on its map marker */
+  .stop-box { position: relative; }
+  .stop-box .fav-badge {
+    position: absolute; top: -9px; right: -9px; font: 15px/1 sans-serif; color: #e3a008;
+    text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff;
+  }
   #panel .facts { margin: 0 0 4px; }
   #panel .facts a { font-weight: 600; color: var(--accent); }
   #panel .muted { color: var(--muted); }
@@ -275,6 +290,7 @@
   <div id="mapWrap">
     <div id="map"></div>
     <aside id="panel" hidden aria-label="Cache details">
+      <button class="cstar" type="button" id="cacheStar" aria-pressed="false">☆</button>
       <button class="close" type="button" aria-label="Close">✕</button>
       <div id="panelBody"></div>
     </aside>
@@ -581,6 +597,7 @@
   // ---------- favourites (saved to favorites.json by serve.py) ----------
   const favorites = new Set();
   const favTrips = new Set();     // favourite trip ids
+  const favCaches = new Set();    // log ids of favourite cache finds
   const starEl = document.getElementById("favStar");
   let favoritesReady = false;
 
@@ -602,12 +619,14 @@
       const j = await resp.json();
       (j.days || []).forEach(d => favorites.add(d));
       (j.trips || []).forEach(id => favTrips.add(id));
+      (j.caches || []).forEach(id => favCaches.add(id));
       favoritesReady = true;
     } catch (err) {
       favoritesReady = false;
     }
     renderList();
     updateStar();
+    if (typeof updateCacheStar === "function") { updateCacheStar(); pins.forEach((p, id) => refreshPin(id)); }
   }
 
   async function toggleTripFavorite() {
@@ -694,6 +713,7 @@
     const day = DAYS.find(d => d.date === currentDate);
     if (!day) return null;
     dayLayer.clearLayers();
+    pins.clear();
     closePanel();
     showTripLegend(false);
     playEl.disabled = false;
@@ -719,6 +739,7 @@
   function showTrip() {
     runToken++;
     dayLayer.clearLayers();
+    pins.clear();
     closePanel();
     playEl.disabled = true;
     titleEl.textContent = trip.name + " — " + Finds.dateRange(trip.start, trip.end);
@@ -756,21 +777,30 @@
     tripLegendShown = on;
   }
 
-  function addPin(stop, index, opts = {}) {
+  // Markers on the map now, by log id, so a favourite star can be added or removed
+  const pins = new Map();
+
+  function pinIcon(stop, opts) {
     const src = typeIcon(stop.type);
     const inner = src
       ? '<img src="' + src + '" alt="">'
       : '<div class="no-icon">?</div>';
-    const icon = L.divIcon({
+    return L.divIcon({
       className: "",
       html: '<div class="stop-box" style="background:' + stopColor(stop) +
-        (opts.color ? ";border:3px solid " + opts.color : "") + '">' + inner + "</div>",
+        (opts.color ? ";border:3px solid " + opts.color : "") + '">' + inner +
+        (favCaches.has(stop.logId) ? '<span class="fav-badge">★</span>' : "") + "</div>",
       iconSize: [36, 36],
       iconAnchor: [18, 18],
       popupAnchor: [0, -18],
       tooltipAnchor: [0, -18]
     });
+  }
+
+  function addPin(stop, index, opts = {}) {
+    const icon = pinIcon(stop, opts);
     const marker = L.marker([stop.lat, stop.lon], { icon: icon, zIndexOffset: index }).addTo(dayLayer);
+    pins.set(stop.logId, { marker, stop, opts });
     marker.bindTooltip((opts.label || "") + (index + 1) + ". " + escapeHtml(stop.name), { direction: "top" });
     marker.on("click", () => openPanel(stop, index, opts.day));
     return marker;
@@ -780,8 +810,50 @@
   const panelEl = document.getElementById("panel");
   const panelBody = document.getElementById("panelBody");
 
+  const cacheStarEl = document.getElementById("cacheStar");
+  let panelStop = null;
+
+  function updateCacheStar() {
+    if (!panelStop) return;
+    const on = favCaches.has(panelStop.logId);
+    cacheStarEl.textContent = on ? "★" : "☆";
+    cacheStarEl.classList.toggle("on", on);
+    cacheStarEl.setAttribute("aria-pressed", String(on));
+    cacheStarEl.disabled = !favoritesReady || !panelStop.logId;
+    cacheStarEl.title = !favoritesReady ? "Favourites need the page opened with python3 serve.py"
+      : on ? "Remove this cache from favourites" : "Add this cache to favourites";
+  }
+
+  function refreshPin(logId) {
+    const p = pins.get(logId);
+    if (p && dayLayer.hasLayer(p.marker)) p.marker.setIcon(pinIcon(p.stop, p.opts));
+  }
+
+  cacheStarEl.addEventListener("click", async () => {
+    if (!panelStop || !favoritesReady) return;
+    const id = panelStop.logId;
+    const wasOn = favCaches.has(id);
+    if (wasOn) favCaches.delete(id); else favCaches.add(id);
+    updateCacheStar();
+    refreshPin(id);
+    try {
+      const resp = await fetch("api/favorites", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ caches: [...favCaches] })
+      });
+      if (!resp.ok) throw new Error(resp.status);
+    } catch (err) {
+      if (wasOn) favCaches.add(id); else favCaches.delete(id);
+      updateCacheStar();
+      refreshPin(id);
+      alert("Couldn't save the favourite. Is serve.py still running?");
+    }
+  });
+
   function openPanel(stop, index, day) {
     day = day || DAYS.find(d => d.date === currentDate);
+    panelStop = stop;
     const place = stop.town
       ? (stop.near ? "near " : "") + stop.town + (stop.area ? " (" + stop.area + ")" : "")
       : "";
@@ -798,6 +870,7 @@
         : '<div class="log muted">Log not in My Finds file.</div>');
     panelEl.hidden = false;
     panelEl.scrollTop = 0;
+    updateCacheStar();
   }
 
   // Log text is plain text with Geocaching.com's old formatting codes:
@@ -964,6 +1037,12 @@
       : place ? tripDayList[0].date : startDate;
     selectOnly(first);
     selectDay(first);
+    const cacheId = Number(params.get("cache"));
+    if (cacheId && first !== "trip") {
+      const day = DAYS.find(d => d.date === first);
+      const i = day ? day.stops.findIndex(s => s.logId === cacheId) : -1;
+      if (i >= 0) openPanel(day.stops[i], i, day);
+    }
   }
   start();
 })();

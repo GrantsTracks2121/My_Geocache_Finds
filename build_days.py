@@ -489,7 +489,8 @@ def label_canadian_stop(grid, bounds, muni, lat, lon):
 
 # ---------------------------------------------------------------------------
 # My Places (places.json, set on the Dashboard): Grant's own named areas, such
-# as Ministik or Blackfoot, each a centre point and a radius. A cache inside
+# as Ministik or Blackfoot, each a circle (centre point and radius) or a
+# rectangle (north, south, east and west edges). A cache inside
 # one is credited to that place instead of the nearest town, in day titles and
 # in Browse by Location. Where places overlap, the one whose centre is
 # closest wins.
@@ -506,18 +507,30 @@ def load_my_places():
     places = []
     for p in data.get("places", []):
         try:
-            places.append((str(p["name"]), float(p["lat"]), float(p["lon"]), float(p["radiusKm"])))
+            if p.get("shape") == "rect":
+                n, s, e, w = (float(p[k]) for k in ("north", "south", "east", "west"))
+                places.append({"name": str(p["name"]), "rect": (n, s, e, w),
+                               "lat": (n + s) / 2, "lon": (e + w) / 2})
+            else:
+                places.append({"name": str(p["name"]), "lat": float(p["lat"]), "lon": float(p["lon"]),
+                               "radius": float(p["radiusKm"])})
         except (KeyError, TypeError, ValueError):
             continue
     return places
 
 
 def my_place_for(places, lat, lon):
+    """The place a point is inside; if several, the one whose centre is closest."""
     best, best_d = None, None
-    for name, plat, plon, radius in places:
-        d = km_between(lat, lon, plat, plon)
-        if d <= radius and (best_d is None or d < best_d):
-            best, best_d = name, d
+    for p in places:
+        d = km_between(lat, lon, p["lat"], p["lon"])
+        if "rect" in p:
+            n, s, e, w = p["rect"]
+            inside = s <= lat <= n and w <= lon <= e
+        else:
+            inside = d <= p["radius"]
+        if inside and (best_d is None or d < best_d):
+            best, best_d = p["name"], d
     return best
 
 

@@ -16,8 +16,19 @@
   <a href="favorites.html">Favourites</a>
 </nav>
 
-<h1>My Geocache Finds</h1>
-<p class="subtitle" id="summary">–</p>
+<div class="profile-row">
+  <div class="picture" id="picture" role="button" tabindex="0" title="Click or drop a picture here">
+    <img id="picture-img" alt="" hidden>
+    <div class="picture-empty" id="picture-empty"><span class="plus">+</span>Add your picture</div>
+    <div class="picture-change" id="picture-change" hidden>Change picture</div>
+    <button class="picture-remove" id="picture-remove" type="button" title="Remove picture" hidden>✕</button>
+  </div>
+  <div class="profile-text">
+    <h1>My Geocache Finds</h1>
+    <p class="subtitle" id="summary">–</p>
+    <p class="picture-status" id="picture-status"></p>
+  </div>
+</div>
 <div id="file-notice" class="notice" hidden>
   You opened this page as a file, so favourites, settings and loading a new My Finds file won't work.
   In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
@@ -42,7 +53,7 @@
   </a>
   <a class="section-card" href="favorites.html">
     <h3>Favourites</h3>
-    <p>The trips and days you've starred.</p>
+    <p>The trips, days and caches you've starred.</p>
     <div class="figures" id="fav-figures">–</div>
   </a>
 </div>
@@ -63,7 +74,7 @@
 <div class="panel places-panel">
   <div class="setting">
     <span class="sname">My Places</span>
-    <span class="sdesc">Name your own places. Caches inside a place's circle are credited to it
+    <span class="sdesc">Name your own places. Caches inside a place's circle or rectangle are labeled with this place name
       instead of the nearest town, in day titles and in Browse by Location.</span>
   </div>
   <ul class="place-list" id="place-list"></ul>
@@ -73,10 +84,15 @@
       <label>Name
         <input type="text" id="p-name" maxlength="80" required>
       </label>
-      <label>Radius <span id="p-radius-val"></span>
+      <div class="choice shape-choice" role="radiogroup" aria-label="Shape">
+        <label><input type="radio" name="p-shape" value="circle" checked>Circle</label>
+        <label><input type="radio" name="p-shape" value="rect">Rectangle</label>
+      </div>
+      <label id="p-radius-row">Radius <span id="p-radius-val"></span>
         <input type="range" id="p-radius" min="0.5" max="25" step="0.5" value="3">
       </label>
       <div class="pf-info" id="p-info">Click the map to set the centre.</div>
+      <button class="btn secondary small" type="button" id="p-restart" hidden>Start over</button>
       <div class="pf-actions">
         <button class="btn" type="submit" id="p-save">Add place</button>
         <button class="btn secondary" type="button" id="p-cancel" hidden>Cancel</button>
@@ -116,6 +132,7 @@
 
   let favoriteDays = [];
   let favoriteTrips = [];
+  let favoriteCaches = [];
   let trips = null;
 
   function render() {
@@ -179,12 +196,15 @@
     const days = favoriteDays.filter(d => byDate.has(d)).length;
     const tripIds = new Set((trips || []).map(t => t.id));
     const tripCount = favoriteTrips.filter(id => tripIds.has(id)).length;
-    if (!days && !tripCount) {
-      el.innerHTML = '<span class="muted">None yet. Click a ☆ beside a day or a trip.</span>';
+    const logIds = new Set((window.GEOCACHE_DAYS || []).flatMap(d => d.stops.map(s => s.logId)));
+    const cacheCount = favoriteCaches.filter(id => logIds.has(id)).length;
+    if (!days && !tripCount && !cacheCount) {
+      el.innerHTML = '<span class="muted">None yet. Click a ☆ beside a day, a trip or a cache.</span>';
       return;
     }
     el.innerHTML = '<span style="color:var(--gold)">★</span> <strong>' + tripCount + "</strong> trip" + (tripCount === 1 ? "" : "s") +
-      " · <strong>" + num(days) + "</strong> day" + (days === 1 ? "" : "s");
+      " · <strong>" + num(days) + "</strong> day" + (days === 1 ? "" : "s") +
+      "<br><strong>" + num(cacheCount) + "</strong> cache" + (cacheCount === 1 ? "" : "s");
   }
 
   // ---------- favourites and settings from serve.py ----------
@@ -195,6 +215,7 @@
         const j = await resp.json();
         favoriteDays = j.days || [];
         favoriteTrips = j.trips || [];
+        favoriteCaches = j.caches || [];
       }
     } catch (err) { /* not served */ }
     renderFavorites();
@@ -305,7 +326,83 @@
 })();
 </script>
 <script>
+// ---------- Dashboard picture (saved in profile/ by serve.py) ----------
+(function () {
+  "use strict";
+  const served = location.protocol.startsWith("http");
+  const box = document.getElementById("picture");
+  const img = document.getElementById("picture-img");
+  const empty = document.getElementById("picture-empty");
+  const change = document.getElementById("picture-change");
+  const remove = document.getElementById("picture-remove");
+  const status = document.getElementById("picture-status");
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "image/png,image/jpeg,image/gif,image/webp";
+  input.hidden = true;
+  box.appendChild(input);
+
+  function show(src) {
+    img.hidden = !src;
+    if (src) img.src = src; else img.removeAttribute("src");
+    empty.hidden = !!src;
+    change.hidden = !src;
+    remove.hidden = !src;
+    box.classList.toggle("has", !!src);
+  }
+
+  async function send(file) {
+    if (!file) return;
+    if (!served) { status.textContent = "Start serve.py to add a picture."; return; }
+    if (!/^image\//.test(file.type) && !/\.(png|jpe?g|gif|webp)$/i.test(file.name)) {
+      status.textContent = "Please choose a picture (PNG, JPEG, GIF or WebP).";
+      return;
+    }
+    status.textContent = "Saving picture…";
+    try {
+      const resp = await fetch("api/picture", { method: "POST", body: file });
+      const j = await resp.json();
+      if (!j.ok) throw new Error(j.error);
+      show(j.picture);
+      status.textContent = "";
+    } catch (err) {
+      status.textContent = err.message === "Failed to fetch" ? "Could not reach the server. Is serve.py running?" : err.message;
+    }
+  }
+
+  box.addEventListener("click", e => { if (!e.target.closest(".picture-remove")) input.click(); });
+  box.addEventListener("keydown", e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); input.click(); } });
+  input.addEventListener("click", e => e.stopPropagation());
+  input.addEventListener("change", () => { send(input.files[0]); input.value = ""; });
+  box.addEventListener("dragover", e => { e.preventDefault(); box.classList.add("over"); });
+  box.addEventListener("dragleave", () => box.classList.remove("over"));
+  box.addEventListener("drop", e => {
+    e.preventDefault();
+    e.stopPropagation();
+    box.classList.remove("over");
+    send(e.dataTransfer.files[0]);
+  });
+  remove.addEventListener("click", async e => {
+    e.stopPropagation();
+    if (!confirm("Remove your Dashboard picture?")) return;
+    try {
+      await fetch("api/picture/remove", { method: "POST" });
+      show(null);
+    } catch (err) {
+      status.textContent = "Could not reach the server. Is serve.py running?";
+    }
+  });
+
+  if (served) {
+    fetch("api/picture", { cache: "no-store" }).then(r => r.ok ? r.json() : {}).then(j => show(j.picture || null)).catch(() => show(null));
+  } else {
+    show(null);
+  }
+})();
+</script>
+<script>
 // ---------- My Places (saved to places.json by serve.py) ----------
+// A place is a circle (centre + radius) or a rectangle (two opposite corners).
 (function () {
   "use strict";
   const F = window.Finds;
@@ -314,15 +411,20 @@
   const form = document.getElementById("place-form");
   const nameEl = document.getElementById("p-name");
   const radiusEl = document.getElementById("p-radius");
+  const radiusRow = document.getElementById("p-radius-row");
   const radiusVal = document.getElementById("p-radius-val");
   const infoEl = document.getElementById("p-info");
   const saveEl = document.getElementById("p-save");
   const cancelEl = document.getElementById("p-cancel");
   const statusEl = document.getElementById("p-status");
+  const shapeEls = [...document.querySelectorAll('input[name="p-shape"]')];
+  const restartEl = document.getElementById("p-restart");
 
   let places = [];
   let editingId = null;
-  let centre = null;            // [lat, lon] being placed
+  let shape = "circle";
+  let centre = null;            // circle: [lat, lon]
+  let corners = [];             // rectangle: up to two [lat, lon] corners
 
   function allStops() {
     return (window.GEOCACHE_DAYS || []).flatMap(d => d.stops.map(s => ({ s, date: d.date })));
@@ -332,12 +434,37 @@
     const y = (lat2 - lat1) * Math.PI / 180;
     return 6371 * Math.hypot(x, y);
   }
-  function inside(lat, lon, r) {
-    const hits = allStops().filter(x => km(x.s.lat, x.s.lon, lat, lon) <= r);
+  function isRect(p) { return p.shape === "rect"; }
+  function contains(p, lat, lon) {
+    return isRect(p) ? lat >= p.south && lat <= p.north && lon >= p.west && lon <= p.east
+      : km(lat, lon, p.lat, p.lon) <= p.radiusKm;
+  }
+  function inside(p) {
+    const hits = allStops().filter(x => contains(p, x.s.lat, x.s.lon));
     return { caches: hits.length, days: new Set(hits.map(x => x.date)).size };
   }
+  function bounds(p) {
+    return isRect(p) ? L.latLngBounds([p.south, p.west], [p.north, p.east])
+      : L.latLng(p.lat, p.lon).toBounds(p.radiusKm * 2600);
+  }
+  function sizeText(p) {
+    if (!isRect(p)) return p.radiusKm + " km circle";
+    const w = km((p.north + p.south) / 2, p.west, (p.north + p.south) / 2, p.east);
+    const h = km(p.south, p.west, p.north, p.west);
+    return "Rectangle " + w.toFixed(1) + " × " + h.toFixed(1) + " km";
+  }
+  // The shape being drawn, as a place (or null if not finished)
+  function draft() {
+    if (shape === "rect") {
+      if (corners.length < 2) return null;
+      const [a, b] = corners;
+      return { shape: "rect", north: Math.max(a[0], b[0]), south: Math.min(a[0], b[0]),
+        east: Math.max(a[1], b[1]), west: Math.min(a[1], b[1]) };
+    }
+    return centre ? { shape: "circle", lat: centre[0], lon: centre[1], radiusKm: Number(radiusEl.value) } : null;
+  }
 
-  // ---- map: your caches as small dots, places as circles ----
+  // ---- map: your caches as small dots, places as circles and rectangles ----
   const map = L.map("place-map", { preferCanvas: true }).setView([53.45, -113.4], 9);
   L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
@@ -353,43 +480,154 @@
     }
   }
 
+  function shapeLayer(p, style) {
+    return isRect(p) ? L.rectangle(bounds(p), style) : L.circle([p.lat, p.lon], Object.assign({ radius: p.radiusKm * 1000 }, style));
+  }
+
   function drawPlaces() {
     placeLayer.clearLayers();
     for (const p of places) {
       if (p.id === editingId) continue;
-      L.circle([p.lat, p.lon], { radius: p.radiusKm * 1000, color: "#2c6fbb", weight: 2, fillOpacity: 0.08 })
+      shapeLayer(p, { color: "#2c6fbb", weight: 2, fillOpacity: 0.08, interactive: false })
         .bindTooltip(p.name, { permanent: true, direction: "center", className: "place-label" })
         .addTo(placeLayer);
     }
   }
 
-  function drawEdit() {
+  // ---- drawing and adjusting the shape ----
+  // Circle: click to place the centre; drag the centre to move it; the slider sets the size.
+  // Rectangle: click two opposite corners; then drag a corner to resize or the middle to move it.
+  const EDIT_STYLE = { color: "#e3a008", weight: 3, fillOpacity: 0.15, interactive: false };
+  // Corner handles: a small visible square inside a larger, easy-to-grab area
+  const handleIcon = cls => L.divIcon({ className: "", html: '<div class="handle-hit ' + cls + '"><div class="handle"></div></div>',
+    iconSize: [28, 28], iconAnchor: [14, 14] });
+  const moveIcon = L.divIcon({ className: "", html: '<div class="handle move" title="Drag to move">✥</div>', iconSize: [26, 26], iconAnchor: [13, 13] });
+  let editShape = null;          // the gold circle or rectangle
+  let handles = [];              // draggable markers for it
+
+  function clearEdit() {
     editLayer.clearLayers();
-    const r = Number(radiusEl.value);
-    radiusVal.textContent = r + " km";
-    if (!centre) {
-      infoEl.textContent = "Click the map to set the centre.";
-      return;
-    }
-    L.circle(centre, { radius: r * 1000, color: "#e3a008", weight: 3, fillOpacity: 0.15 }).addTo(editLayer);
-    L.circleMarker(centre, { radius: 5, color: "#e3a008", fillColor: "#fff", fillOpacity: 1, weight: 3 }).addTo(editLayer);
-    const n = inside(centre[0], centre[1], r);
-    infoEl.textContent = F.plural(n.caches, "cache") + " on " + F.plural(n.days, "caching day") + " inside this circle.";
+    editShape = null;
+    handles = [];
   }
 
-  map.on("click", e => { centre = [e.latlng.lat, e.latlng.lng]; drawEdit(); });
-  radiusEl.addEventListener("input", drawEdit);
+  function updateInfo() {
+    const d = draft();
+    radiusVal.textContent = radiusEl.value + " km";
+    restartEl.hidden = !(shape === "rect" && corners.length);
+    if (shape === "rect" && !d) {
+      infoEl.textContent = corners.length ? "Now click the opposite corner." : "Click one corner of the rectangle on the map, then the opposite corner.";
+      return;
+    }
+    if (!d) { infoEl.textContent = "Click the map to set the centre."; return; }
+    const n = inside(d);
+    infoEl.textContent = F.plural(n.caches, "cache") + " on " + F.plural(n.days, "caching day") + " inside this " +
+      (shape === "rect" ? "rectangle. Drag a corner to resize it, or the middle ✥ to move it."
+        : "circle. Drag the centre to move it, or click elsewhere on the map.");
+  }
+
+  // Rectangle corners in order NW, NE, SE, SW, from the two stored corners
+  function rectCorners() {
+    const d = draft();
+    return [[d.north, d.west], [d.north, d.east], [d.south, d.east], [d.south, d.west]];
+  }
+  function rectMiddle() {
+    const d = draft();
+    return [(d.north + d.south) / 2, (d.east + d.west) / 2];
+  }
+
+  // Move the gold shape and its handles to match the current numbers,
+  // leaving alone the handle being dragged
+  function syncEdit(dragging) {
+    const d = draft();
+    if (!d || !editShape) return;
+    if (shape === "rect") {
+      editShape.setBounds([[d.south, d.west], [d.north, d.east]]);
+      const pts = [...rectCorners(), rectMiddle()];
+      handles.forEach((h, i) => { if (h !== dragging) h.setLatLng(pts[i]); });
+    } else {
+      editShape.setLatLng(centre).setRadius(d.radiusKm * 1000);
+      if (handles[0] !== dragging) handles[0].setLatLng(centre);
+    }
+  }
+
+  function drawEdit() {
+    clearEdit();
+    radiusRow.hidden = shape !== "circle";
+    const d = draft();
+    if (shape === "rect") {
+      corners.forEach(c => L.circleMarker(c, { radius: 5, color: "#e3a008", fillColor: "#fff", fillOpacity: 1, weight: 3 }).addTo(editLayer));
+      if (d) {
+        editLayer.clearLayers();
+        editShape = L.rectangle([[d.south, d.west], [d.north, d.east]], EDIT_STYLE).addTo(editLayer);
+        const cls = ["nw", "ne", "se", "sw"];
+        rectCorners().forEach((pt, i) => {
+          const h = L.marker(pt, { icon: handleIcon(cls[i]), draggable: true, keyboard: false }).addTo(editLayer);
+          // The corner opposite the one being dragged stays put
+          let opp = null;
+          h.on("dragstart", () => { opp = rectCorners()[(i + 2) % 4]; });
+          h.on("drag", () => {
+            const ll = h.getLatLng();
+            corners = [[ll.lat, ll.lng], opp];
+            syncEdit(h);
+          });
+          h.on("dragend", () => { syncEdit(); updateInfo(); });
+          handles.push(h);
+        });
+        const mid = L.marker(rectMiddle(), { icon: moveIcon, draggable: true, keyboard: false }).addTo(editLayer);
+        let last = null;
+        mid.on("dragstart", () => { last = mid.getLatLng(); });
+        mid.on("drag", () => {
+          const ll = mid.getLatLng();
+          const dLat = ll.lat - last.lat, dLon = ll.lng - last.lng;
+          last = ll;
+          corners = corners.map(c => [c[0] + dLat, c[1] + dLon]);
+          syncEdit(mid);
+        });
+        mid.on("dragend", () => { syncEdit(); updateInfo(); });
+        handles.push(mid);
+      }
+    } else if (d) {
+      editShape = L.circle(centre, Object.assign({ radius: d.radiusKm * 1000 }, EDIT_STYLE)).addTo(editLayer);
+      const h = L.marker(centre, { icon: moveIcon, draggable: true, keyboard: false }).addTo(editLayer);
+      h.on("drag", () => { const ll = h.getLatLng(); centre = [ll.lat, ll.lng]; syncEdit(h); });
+      h.on("dragend", updateInfo);
+      handles.push(h);
+    }
+    updateInfo();
+  }
+
+  map.on("click", e => {
+    const pt = [e.latlng.lat, e.latlng.lng];
+    if (shape === "rect") {
+      if (corners.length >= 2) return;      // finished: adjust with the handles, or Start over
+      corners = [...corners, pt];
+      drawEdit();
+    } else {
+      centre = pt;
+      if (editShape) { syncEdit(); updateInfo(); } else drawEdit();
+    }
+  });
+  radiusEl.addEventListener("input", () => { if (editShape) { syncEdit(); updateInfo(); } else updateInfo(); });
+  restartEl.addEventListener("click", () => { corners = []; drawEdit(); });
+
+  function setShape(s) {
+    shape = s;
+    shapeEls.forEach(r => r.checked = r.value === s);
+    drawEdit();
+  }
+  shapeEls.forEach(r => r.addEventListener("change", () => setShape(r.value)));
 
   // ---- list ----
   function renderList() {
     if (!places.length) {
-      listEl.innerHTML = '<li class="none">No places yet. Name one below, click its centre on the map and set its size.</li>';
+      listEl.innerHTML = '<li class="none">No places yet. Name one below, choose a circle or a rectangle, and draw it on the map.</li>';
       return;
     }
     listEl.innerHTML = places.map(p => {
-      const n = inside(p.lat, p.lon, p.radiusKm);
+      const n = inside(p);
       return '<li' + (p.id === editingId ? ' class="editing"' : "") + '><span class="pname">' + F.esc(p.name) + "</span>" +
-        '<span class="pmeta">' + p.radiusKm + " km circle · " + F.plural(n.caches, "cache") + " · " + F.plural(n.days, "day") + "</span>" +
+        '<span class="pmeta">' + sizeText(p) + " · " + F.plural(n.caches, "cache") + " · " + F.plural(n.days, "day") + "</span>" +
         '<span class="pbtns"><button class="btn secondary small" type="button" data-show="' + p.id + '">Show</button>' +
         '<button class="btn secondary small" type="button" data-edit="' + p.id + '">Edit</button>' +
         '<button class="btn danger small" type="button" data-delete="' + p.id + '">Delete</button></span></li>';
@@ -398,7 +636,7 @@
 
   listEl.addEventListener("click", e => {
     const show = e.target.closest("[data-show]"), edit = e.target.closest("[data-edit]"), del = e.target.closest("[data-delete]");
-    if (show) { const p = places.find(x => x.id === show.dataset.show); map.fitBounds(L.latLng(p.lat, p.lon).toBounds(p.radiusKm * 2600)); }
+    if (show) map.fitBounds(bounds(places.find(x => x.id === show.dataset.show)), { padding: [20, 20] });
     if (edit) startEdit(edit.dataset.edit);
     if (del) deletePlace(del.dataset.delete);
   });
@@ -406,13 +644,14 @@
   function resetForm() {
     editingId = null;
     centre = null;
+    corners = [];
     form.reset();
     radiusEl.value = 3;
     document.getElementById("pf-title").textContent = "Add a place";
     saveEl.textContent = "Add place";
     cancelEl.hidden = true;
     drawPlaces();
-    drawEdit();
+    setShape("circle");
     renderList();
   }
   cancelEl.addEventListener("click", () => { statusEl.textContent = ""; resetForm(); });
@@ -422,15 +661,21 @@
     if (!p) return;
     editingId = id;
     nameEl.value = p.name;
-    radiusEl.value = p.radiusKm;
-    centre = [p.lat, p.lon];
+    if (isRect(p)) {
+      corners = [[p.north, p.west], [p.south, p.east]];
+      centre = null;
+    } else {
+      radiusEl.value = p.radiusKm;
+      centre = [p.lat, p.lon];
+      corners = [];
+    }
     document.getElementById("pf-title").textContent = "Edit " + p.name;
     saveEl.textContent = "Save changes";
     cancelEl.hidden = false;
     statusEl.textContent = "";
-    map.fitBounds(L.latLng(p.lat, p.lon).toBounds(p.radiusKm * 2600));
+    map.fitBounds(bounds(p), { padding: [20, 20] });
     drawPlaces();
-    drawEdit();
+    setShape(isRect(p) ? "rect" : "circle");
     renderList();
     nameEl.focus();
   }
@@ -463,9 +708,12 @@
     e.preventDefault();
     const name = nameEl.value.trim();
     if (!name) { statusEl.innerHTML = '<span class="err">Please give the place a name.</span>'; return; }
-    if (!centre) { statusEl.innerHTML = '<span class="err">Click the map to set the place\'s centre.</span>'; return; }
-    const place = { id: editingId || "place-" + Date.now().toString(36), name,
-      lat: centre[0], lon: centre[1], radiusKm: Number(radiusEl.value) };
+    const d = draft();
+    if (!d) {
+      statusEl.innerHTML = '<span class="err">' + (shape === "rect" ? "Click two opposite corners on the map." : "Click the map to set the place's centre.") + "</span>";
+      return;
+    }
+    const place = Object.assign({ id: editingId || "place-" + Date.now().toString(36), name }, d);
     const list = editingId ? places.map(p => p.id === editingId ? place : p) : [...places, place];
     save(list, (editingId ? "Saved " : "Added ") + name + ".");
   });

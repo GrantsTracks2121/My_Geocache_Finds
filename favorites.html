@@ -16,7 +16,7 @@
 </nav>
 
 <h1>Favourites</h1>
-<p class="subtitle" id="summary">Your favourite trips and days, newest first.</p>
+<p class="subtitle" id="summary">Your favourite trips, days and caches, newest first.</p>
 <div id="file-notice" class="notice" hidden>
   You opened this page as a file, so favourites can't be loaded.
   In Terminal, in the <code>My_Geocache_Finds</code> folder, run <code>python3 serve.py</code>,
@@ -33,6 +33,11 @@
   <div class="fold-body" id="fav-days"><div class="empty">Loading…</div></div>
 </details>
 
+<details class="fold" id="fold-caches" open>
+  <summary>Favourite Caches <span class="count" id="caches-count"></span></summary>
+  <div class="fold-body" id="fav-caches"><div class="empty">Loading…</div></div>
+</details>
+
 <script src="data/days.js"></script>
 <script src="common.js"></script>
 <script>
@@ -43,9 +48,10 @@
   const served = location.protocol.startsWith("http");
   const tripsBox = document.getElementById("fav-trips");
   const daysBox = document.getElementById("fav-days");
+  const cachesBox = document.getElementById("fav-caches");
 
   // Remember which sections are open or closed (just in this browser)
-  ["fold-trips", "fold-days"].forEach(id => {
+  ["fold-trips", "fold-days", "fold-caches"].forEach(id => {
     const el = document.getElementById(id);
     try {
       const saved = localStorage.getItem(id);
@@ -58,7 +64,7 @@
 
   if (!served) {
     document.getElementById("file-notice").hidden = false;
-    tripsBox.innerHTML = daysBox.innerHTML =
+    tripsBox.innerHTML = daysBox.innerHTML = cachesBox.innerHTML =
       '<div class="empty">Favourites show here when the page is opened through serve.py.</div>';
     return;
   }
@@ -110,14 +116,36 @@
     daysBox.innerHTML = html + "</ul>";
   }
 
+  // Favourite caches: newest find first. Clicking opens that day with the cache's panel open.
+  function renderCaches(favIds) {
+    const wanted = new Set(favIds);
+    const list = [];
+    for (const d of DAYS) for (const s of d.stops) if (wanted.has(s.logId)) list.push({ d, s });
+    list.sort((a, b) => b.d.date.localeCompare(a.d.date));
+    document.getElementById("caches-count").textContent = "· " + list.length;
+    if (!list.length) {
+      cachesBox.innerHTML = '<div class="empty">No favourite caches yet. In Browse by Date, click a cache on the map and then the ☆ in its panel.</div>';
+      return;
+    }
+    cachesBox.innerHTML = '<ul class="fav-list">' + list.map(({ d, s }) => {
+      const place = s.town ? (s.near ? "near " : "") + s.town : F.region(s);
+      return '<li><a href="day-replay.html?date=' + d.date + "&cache=" + s.logId + '">' +
+        '<span class="star">★</span>' +
+        '<span class="fdate">' + F.esc(s.name) + "</span>" +
+        '<span class="fplace">' + F.esc(s.code) + " · " + F.esc(s.type) + ' <span class="muted">· ' + F.esc(place) + "</span></span>" +
+        '<span class="fcount">' + F.esc(s.log) + " " + F.prettyDate(d.date) + "</span></a></li>";
+    }).join("") + "</ul>";
+  }
+
   Promise.all([
     fetch("api/favorites", { cache: "no-store" }).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }),
     fetch("api/trips", { cache: "no-store" }).then(r => r.ok ? r.json() : { trips: [] })
   ]).then(([fav, tr]) => {
     renderTrips(fav.trips || [], tr.trips || []);
     renderDays(fav.days || []);
+    renderCaches(fav.caches || []);
   }).catch(() => {
-    tripsBox.innerHTML = daysBox.innerHTML = '<div class="empty">Couldn\'t load favourites. Is serve.py running?</div>';
+    tripsBox.innerHTML = daysBox.innerHTML = cachesBox.innerHTML = '<div class="empty">Couldn\'t load favourites. Is serve.py running?</div>';
   });
 })();
 </script>
