@@ -41,9 +41,11 @@
     border-bottom: 1px solid var(--line);
   }
   #sidebar h1 { font-size: 17px; margin: 0 0 10px; }
-  #sidebar .back { display: inline-block; font-size: 12px; font-weight: 600; color: var(--accent);
-    text-decoration: none; margin-bottom: 6px; }
-  #sidebar .back:hover { text-decoration: underline; }
+  /* Same look as the Dashboard button in the site navigation */
+  #sidebar .back { display: inline-block; font-size: 13px; font-weight: 600; letter-spacing: 0.02em;
+    color: #fff; background: var(--accent); padding: 6px 12px; border-radius: 6px;
+    text-decoration: none; margin-bottom: 10px; }
+  #sidebar .back:hover { filter: brightness(1.12); }
   #tripHead { margin: -4px 0 10px; }
   #tripHead .trip-name { font-weight: 600; font-size: 15px; }
   #tripHead .trip-dates { color: var(--muted); font-size: 12px; }
