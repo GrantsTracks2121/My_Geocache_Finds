@@ -237,7 +237,7 @@ A Calgary cacher [van der Decken](https://www.geocaching.com/p/?guid=7116f780-8a
 
 Here's how to extract your Brass Cap find stats:
 
-1. In a browser, open the [Brass Cap Cache • Stats & Logs](https://brasscap.albertabattlecache.ca/) site at https://brasscap.albertabattlecache.ca/.
+1. In a browser, open the [Brass Cap Cache • Stats & Logs](https://brasscap.albertabattlecache.ca/) site.
 2. Click on the "Cacher Stats" link on the right-hand side of the page.
 3. Find your name on the list of finders and click it to view all your Brass Cap Finds.
 4. On your stats page, copy its address from your browser's address bar. It looks like https://brasscap.albertabattlecache.ca/cacherbreakdown/….html.
