@@ -99,7 +99,7 @@ You download the app as one zip file, the same way you'd download any file, and 
 
 The zip file holds one folder, **My_Geocache_Finds-main**. That folder is the
 app. Put it somewhere you'll find it again, such as your **Documents** folder.
-Everything the app saves (your trips, favourites and so on) goes in this
+Everything the app saves (your trips, favourites and so on) is saved in this
 folder too.
 
 **Windows 10 or 11**
