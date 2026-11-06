@@ -327,7 +327,7 @@ Everything else works offline.
 - Canadian boundaries: Statistics Canada, 2021 Census Boundary Files,
   Statistics Canada Open Licence
 - Brass cap locations: [Alberta Brass Cap Cache stats](https://brasscap.albertabattlecache.ca)
-- Cache type icons: [c:geo](https://github.com/cgeo/cgeo), Apache License 2.0
+- Cache type icons and the app icon: [c:geo](https://github.com/cgeo/cgeo), Apache License 2.0
 - [Leaflet](https://leafletjs.com) (BSD 2-Clause),
   [marked](https://github.com/markedjs/marked) (MIT),
   [DOMPurify](https://github.com/cure53/DOMPurify) (Apache 2.0 / MPL 2.0)
