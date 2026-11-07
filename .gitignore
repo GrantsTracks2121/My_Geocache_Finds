@@ -20,14 +20,13 @@ places.json
 settings.json
 profile/
 
-# Exceptions: the public brass cap GPX files, and test samples
-!brasscaps/gpx/*.gpx
+# Exception: test samples
 !samples/*.gpx
 
 # Your own brass cap finds (made from your Cacher Stats page in Settings).
-# The cap GPX files in brasscaps/gpx/ are public and shared by everyone.
-brasscaps/brasscaps.json
-brasscaps/stats.html
+# fetch_brasscaps.py downloads the GPX file for each cap you found into
+# brasscaps/gpx/, so the whole folder is personal and built on each computer.
+brasscaps/
 
 # GeoNames download and lookup file (large; rebuilt by build_places.py)
 geonames/
