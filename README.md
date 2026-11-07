@@ -335,6 +335,8 @@ Everything else works offline.
 Geocaching and Pocket Queries are trademarks of Groundspeak, Inc. This app is
 not made by or connected with Geocaching.com.
 
+This application was created with Anthropic's Claude Desktop.
+
 ## License
 
 © 2026 Grant S. Wilson. Released under the [MIT License](LICENSE).
