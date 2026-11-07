@@ -316,7 +316,7 @@ Everything else works offline.
 ## Known limits
 
 - Day titles leave out **Canada** as the "home" country, and name every other
-  country. This is fixed in `build_days.py` (`HOME_COUNTRY`) for now.
+  country. For now, the home country is set in `build_days.py` (`HOME_COUNTRY`).
 
 ---
 
